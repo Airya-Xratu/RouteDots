@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
 import tseslint from 'typescript-eslint';
+import nodeGlobals from 'globals';
 
 export default tseslint.config(
   {
@@ -30,5 +31,10 @@ export default tseslint.config(
     rules: {
       'no-console': 'warn',
     },
+  },
+  {
+    files: ['tools/**/*.mjs'],
+    languageOptions: { globals: nodeGlobals.node },
+    rules: { 'no-console': 'off' },
   },
 );
