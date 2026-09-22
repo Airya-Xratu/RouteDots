@@ -64,7 +64,8 @@ No bundler? Use the IIFE build (three.js included):
 case-insensitive), `City` objects, or bare `{ lat, lng }` points.
 
 **Try it:** open [`examples/showcase/index.html`](./examples/showcase/index.html)
-— a full hero with the search form driving the globe.
+— a full hero with the search form driving the globe (run `npm run build`
+once first — the page loads the IIFE bundle from `dist/`).
 
 ## API in 30 seconds
 
