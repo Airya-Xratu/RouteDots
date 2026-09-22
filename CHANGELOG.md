@@ -8,4 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Initial repository bootstrap (README, roadmap, contributing stub).
+
+- Initial repository bootstrap: README, roadmap, contributing guide, LICENSE (MIT),
+  changelog, PR/issue templates.
+- Project foundation & tooling: TypeScript (strict) source layout, ESM/CJS +
+  type-declaration library build via tsup, convenience IIFE browser bundle with
+  three.js inlined, Vitest unit-test setup, ESLint + Prettier, GitHub Actions CI
+  (lint, typecheck, test, build, and Playwright E2E once present).

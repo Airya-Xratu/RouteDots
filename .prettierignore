@@ -1,0 +1,7 @@
+node_modules
+dist
+coverage
+.playwright
+*.log
+data/land-110m.ts
+examples/**/vendor
