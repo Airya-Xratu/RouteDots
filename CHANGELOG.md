@@ -7,21 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- CI: `ci.yml` was rejected by GitHub at dispatch time — the e2e job used
-  `hashFiles()` in a job-level `if`, which is only allowed on steps, so every
-  workflow run failed in 0 s without executing a single job (quality
-  included). Dropped the tautological guard; `playwright.config.ts` is
-  committed, so the e2e job always runs.
-
 ### Added
 
-- Showcase: a light/dark theme switcher (bottom-right corner) wired to
+- Showcase: a light/dark theme switcher (bottom-right of the hero) wired to
   `RouteDots.setTheme`, so the demo exercises live theme switching.
-- Showcase: a friendly overlay explains to run `npm run build` when the page
-  is opened before the IIFE bundle exists (the bundle is a build artifact,
-  not committed).
+- Showcase: a friendly overlay (scoped to the hero) explains to run
+  `npm run build` when the page is opened before the IIFE bundle exists (the
+  bundle is a build artifact, not committed).
+- `npm run dev` — builds the bundle, then serves the repo with a
+  zero-dependency static server (`tools/serve.mjs`) so the showcase works
+  straight out of the box at `http://localhost:5173` (the root redirects to
+  the showcase page).
 - Endpoint pin badges: each route endpoint now carries a labelled pin (pill +
   stem + dot) with the city name.
   - WebGL mode: a `EndpointLabels` DOM overlay (`src/routes/EndpointLabels.ts`)
@@ -36,15 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Showcase: the search form now reports the drawn route in a live status
-  hint (`London → Dubai · round trip · Sep 22`), and the date field keeps the
-  hint in sync. The error hint restores this status instead of clearing it.
-
-### Fixed
-
-- CI: the workflow file was rejected by GitHub at dispatch time (`hashFiles`
-  is not allowed in a job-level `if`), so every CI run — including `quality`
-  — failed in 0 s without running a single step. Dropped the tautological
-  guard; the Playwright config is committed, so the e2e job always runs.
+  hint under the search button (`London → Dubai · round trip · Sep 22`), kept
+  in sync with the from/to selects, the trip toggle and the departure date;
+  the hint is exposed as `role="status"`/`aria-live="polite"`, and the
+  invalid-pair error restores the last valid status instead of clearing it.
 - Route arcs are thinner and hug the globe more closely for a more accurate
   look: default tube radius `0.0035 → 0.0022` and default lifts
   `0.18 / 0.34 → 0.10 / 0.20` (outbound / return).
@@ -53,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   WebGL sprite texture and the flat-fallback SVG path.
 - `RouteLayer` now takes its default lift/radius from the shared
   `RouteModel` constants instead of duplicating the numbers.
+
+### Fixed
+
+- CI: `ci.yml` was rejected by GitHub at dispatch time — the e2e job used
+  `hashFiles()` in a job-level `if`, which is only allowed on steps, so every
+  workflow run failed in 0 s without executing a single job (quality
+  included). Dropped the tautological guard; `playwright.config.ts` is
+  committed, so the e2e job always runs.
 
 ## [0.1.0] - 2026-09-22
 

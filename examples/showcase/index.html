@@ -272,7 +272,7 @@
         padding: 32px;
         text-align: center;
         font-size: 15px;
-        line-height: 1.6;
+        line-height: 1.8;
         color: var(--ink);
         background: #f7f8fa;
       }
@@ -282,6 +282,7 @@
         padding: 2px 8px;
         border-radius: 6px;
         font-size: 13px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       }
 
       .features {
@@ -433,8 +434,8 @@
           class="theme"
           id="theme"
           type="button"
-          title="Switch light/dark theme"
-          aria-label="Switch light/dark theme"
+          title="Switch to dark theme"
+          aria-label="Switch to dark theme"
         >
           🌙
         </button>
@@ -510,16 +511,16 @@
     <script src="../../dist/routedots.browser.global.js"></script>
     <script>
       (function () {
-        // Opened straight from a fresh clone? The IIFE bundle is built, not
+        // Opened from a fresh clone? The IIFE bundle is a build artifact, not
         // committed — say so instead of failing on a blank hero.
-        if (!window.RouteDots || !window.RouteDots.RouteDots) {
+        if (!window.RouteDots?.RouteDots) {
           const note = document.createElement('div');
           note.className = 'build-note';
           note.innerHTML =
-            '<div><strong>RouteDots bundle not found.</strong><br>' +
-            'Run <code>npm run build</code>, then reload — this page loads<br>' +
-            '<code>dist/routedots.browser.global.js</code>.</div>';
-          document.body.appendChild(note);
+            '<strong>RouteDots bundle not found.</strong><br>Run <code>npm run build</code>' +
+            ' once, then reload — this page loads<br>' +
+            '<code>dist/routedots.browser.global.js</code>.';
+          document.querySelector('.hero')?.appendChild(note);
           return;
         }
         const { RouteDots } = window.RouteDots;
@@ -586,9 +587,11 @@
         });
         window.__rd = rd; // for E2E
 
-        const tripLabel = (rt) => (rt ? 'round trip' : 'one way');
+        // Live "source → destination" status under the search button, kept in
+        // sync with the route, the trip toggle and the departure date.
+        const tripLabel = (roundTrip) => (roundTrip ? 'round trip' : 'one way');
         const departureLabel = () => {
-          const day = new Date(dateEl.value + 'T00:00:00');
+          const day = new Date(`${dateEl.value}T00:00:00`);
           return Number.isNaN(day.getTime())
             ? ''
             : new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(day);
@@ -615,16 +618,16 @@
           if (rd.getRoute()) showSuccess();
         });
 
+        // Light/dark theme switcher — demos RouteDots.setTheme live.
         const themeBtn = document.getElementById('theme');
         let theme = 'light';
         themeBtn.addEventListener('click', () => {
           theme = theme === 'light' ? 'dark' : 'light';
           rd.setTheme(theme);
           themeBtn.textContent = theme === 'light' ? '🌙' : '☀️';
-          themeBtn.setAttribute(
-            'aria-label',
-            `Switch to ${theme === 'light' ? 'dark' : 'light'} theme`,
-          );
+          const label = `Switch to ${theme === 'light' ? 'dark' : 'light'} theme`;
+          themeBtn.title = label;
+          themeBtn.setAttribute('aria-label', label);
         });
 
         oneWay.addEventListener('click', () => {
@@ -646,7 +649,7 @@
           apply();
         });
 
-        // Default route after mount (selects are pre-selected to LHR/DXB)
+        // Default route after mount (the selects are pre-set to LHR → DXB).
         apply();
       })();
     </script>
