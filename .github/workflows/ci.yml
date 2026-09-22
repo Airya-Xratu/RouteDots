@@ -40,7 +40,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - name: Run e2e (debug: report tail to PR comment)
+      - name: 'Run e2e (debug: report tail to PR comment)'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
