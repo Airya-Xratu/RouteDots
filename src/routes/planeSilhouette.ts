@@ -1,8 +1,10 @@
 /**
  * Top-view airliner silhouette, nose pointing up (local +Y).
  *
- * The path data is pure (a list of 2D segments) so it can be unit-tested;
- * `drawPlane` executes it onto a 2D canvas context.
+ * A rounded, friendly outline: smooth fuselage, swept wings with rounded
+ * tips, and a small rounded tail. The path data is pure (a list of 2D
+ * segments) so it can be unit-tested; `drawPlane` executes it onto a 2D
+ * canvas context.
  */
 
 export type PlaneSegment =
@@ -12,52 +14,69 @@ export type PlaneSegment =
   | { op: 'close' };
 
 /**
- * Symmetric airliner outline in a nominal 100×100 box centred at (0,0),
- * nose at the top (y = -48), tail at the bottom (y ≈ +40).
+ * Symmetric airliner outline in a nominal 100×100 box centred at (0,0):
+ * nose at the top (y = -50), tail bottom (≈ +46), wingtips at x = ±50.
  */
 export function buildPlanePath(scale = 1): PlaneSegment[] {
   const s = (n: number) => n * scale;
-  const side = (m: number): PlaneSegment[] =>
+  const wing = (m: number): PlaneSegment[] =>
     m === 1
       ? [
-          { op: 'move', x: s(5), y: s(-6) },
-          { op: 'line', x: s(52), y: s(26) },
-          { op: 'line', x: s(52), y: s(36) },
-          { op: 'line', x: s(5), y: s(24) },
+          { op: 'move', x: s(6), y: s(-8) },
+          { op: 'quad', cx: s(26), cy: s(-2), x: s(42), y: s(14) },
+          { op: 'quad', cx: s(50), cy: s(21), x: s(50), y: s(30) },
+          { op: 'quad', cx: s(50), cy: s(36), x: s(43), y: s(34) },
+          { op: 'line', x: s(10), y: s(22) },
+          { op: 'quad', cx: s(6), cy: s(20), x: s(6), y: s(12) },
           { op: 'close' },
         ]
       : [
-          { op: 'move', x: s(-5), y: s(-6) },
-          { op: 'line', x: s(-52), y: s(26) },
-          { op: 'line', x: s(-52), y: s(36) },
-          { op: 'line', x: s(-5), y: s(24) },
+          { op: 'move', x: s(-6), y: s(-8) },
+          { op: 'quad', cx: s(-26), cy: s(-2), x: s(-42), y: s(14) },
+          { op: 'quad', cx: s(-50), cy: s(21), x: s(-50), y: s(30) },
+          { op: 'quad', cx: s(-50), cy: s(36), x: s(-43), y: s(34) },
+          { op: 'line', x: s(-10), y: s(22) },
+          { op: 'quad', cx: s(-6), cy: s(20), x: s(-6), y: s(12) },
+          { op: 'close' },
+        ];
+
+  const tail = (m: number): PlaneSegment[] =>
+    m === 1
+      ? [
+          { op: 'move', x: s(5), y: s(20) },
+          { op: 'quad', cx: s(14), cy: s(26), x: s(21), y: s(36) },
+          { op: 'quad', cx: s(25), cy: s(42), x: s(21), y: s(46) },
+          { op: 'quad', cx: s(18), cy: s(49), x: s(14), y: s(45) },
+          { op: 'line', x: s(6), y: s(34) },
+          { op: 'quad', cx: s(5), cy: s(30), x: s(5), y: s(25) },
+          { op: 'close' },
+        ]
+      : [
+          { op: 'move', x: s(-5), y: s(20) },
+          { op: 'quad', cx: s(-14), cy: s(26), x: s(-21), y: s(36) },
+          { op: 'quad', cx: s(-25), cy: s(42), x: s(-21), y: s(46) },
+          { op: 'quad', cx: s(-18), cy: s(49), x: s(-14), y: s(45) },
+          { op: 'line', x: s(-6), y: s(34) },
+          { op: 'quad', cx: s(-5), cy: s(30), x: s(-5), y: s(25) },
           { op: 'close' },
         ];
 
   return [
-    // fuselage (nose up)
-    { op: 'move', x: 0, y: s(-48) },
-    { op: 'quad', cx: s(7), cy: s(-30), x: s(6), y: s(-8) },
-    { op: 'line', x: s(6), y: s(20) },
-    { op: 'quad', cx: s(6), cy: s(34), x: 0, y: s(38) },
-    { op: 'quad', cx: s(-6), cy: s(34), x: s(-6), y: s(20) },
-    { op: 'line', x: s(-6), y: s(-8) },
-    { op: 'quad', cx: s(-7), cy: s(-30), x: 0, y: s(-48) },
+    // fuselage (rounded nose up, rounded tail down)
+    { op: 'move', x: 0, y: s(-50) },
+    { op: 'quad', cx: s(9), cy: s(-34), x: s(7), y: s(-12) },
+    { op: 'line', x: s(7), y: s(16) },
+    { op: 'quad', cx: s(7), cy: s(34), x: 0, y: s(42) },
+    { op: 'quad', cx: s(-7), cy: s(34), x: s(-7), y: s(16) },
+    { op: 'line', x: s(-7), y: s(-12) },
+    { op: 'quad', cx: s(-9), cy: s(-34), x: 0, y: s(-50) },
     { op: 'close' },
     // main wings (right, then left)
-    ...side(1),
-    ...side(-1),
+    ...wing(1),
+    ...wing(-1),
     // tail wings (right, then left)
-    { op: 'move', x: s(4), y: s(24) },
-    { op: 'line', x: s(24), y: s(42) },
-    { op: 'line', x: s(24), y: s(48) },
-    { op: 'line', x: s(4), y: s(36) },
-    { op: 'close' },
-    { op: 'move', x: s(-4), y: s(24) },
-    { op: 'line', x: s(-24), y: s(42) },
-    { op: 'line', x: s(-24), y: s(48) },
-    { op: 'line', x: s(-4), y: s(36) },
-    { op: 'close' },
+    ...tail(1),
+    ...tail(-1),
   ];
 }
 

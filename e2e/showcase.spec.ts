@@ -33,11 +33,33 @@ test('showcase hero: form drives the globe route', async ({ page }) => {
   expect(route?.to.code).toBe('DXB');
   expect(route?.roundTrip).toBe(true);
 
-  // Changing the destination updates the route live.
+  // Pin badges show the city names at both endpoints.
+  await page.waitForFunction(
+    () => {
+      const pins = Array.from(document.querySelectorAll('.rd-pin'));
+      return pins.length === 2 && pins.every((p) => p.style.opacity === '1');
+    },
+    undefined,
+    { timeout: 15_000 },
+  );
+  const pinNames = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('.rd-pin .rd-pin-label')).map((n) => n.textContent),
+  );
+  expect(pinNames).toEqual(['London', 'Dubai']);
+
+  // Changing the destination updates the route live… and the pin with it.
   await page.selectOption('#to', 'SIN');
   await page.waitForTimeout(300);
   const route2 = await page.evaluate(() => (window as unknown as Hooks).__rd!.getRoute());
   expect(route2?.to.code).toBe('SIN');
+  await page.waitForFunction(
+    () =>
+      Array.from(document.querySelectorAll('.rd-pin .rd-pin-label'))
+        .map((n) => n.textContent)
+        .join('|') === 'London|Singapore',
+    undefined,
+    { timeout: 5_000 },
+  );
 
   // One-way toggle drops the return arc; swap exchanges endpoints.
   await page.click('#one-way');

@@ -58,9 +58,18 @@ interface FlatRouteOptions {
   roundTrip?: boolean;
 }
 
+/** A route endpoint; `name` (when given) renders a text label. */
+export interface FlatRoutePoint extends LatLon {
+  name?: string;
+}
+
+// Rounded top-view airliner (nose up), ~20px tip-to-tail.
 const PLANE_PATH_D =
-  'M0,-9 C1.2,-6 1.6,-3 1.5,-1 L1.5,4 C1.5,6 0,7.5 0,7.5 C0,7.5 -1.5,6 -1.5,4 L-1.5,-1 C-1.6,-3 -1.2,-6 0,-9 Z ' +
-  'M1,-2 L9,4 L9,5.6 L1,3.4 Z M-1,-2 L-9,4 L-9,5.6 L-1,3.4 Z';
+  'M0,-10 Q1.8,-6.8 1.4,-2.4 L1.4,3.2 Q1.4,6.8 0,8.4 Q-1.4,6.8 -1.4,3.2 L-1.4,-2.4 Q-1.8,-6.8 0,-10 Z ' +
+  'M1.2,-1.6 Q5.2,-0.4 8.4,2.8 Q10,4.2 10,6 Q10,7.2 8.6,6.8 L2,4.4 Q1.2,4 1.2,2.4 Z ' +
+  'M-1.2,-1.6 Q-5.2,-0.4 -8.4,2.8 Q-10,4.2 -10,6 Q-10,7.2 -8.6,6.8 L-2,4.4 Q-1.2,4 -1.2,2.4 Z ' +
+  'M1,4 Q2.8,5.2 4.2,7.2 Q5,8.4 4.2,9.2 Q3.6,9.8 2.8,9 L1.2,6.8 Q1,6 1,5 Z ' +
+  'M-1,4 Q-2.8,5.2 -4.2,7.2 Q-5,8.4 -4.2,9.2 Q-3.6,9.8 -2.8,9 L-1.2,6.8 Q-1,6 -1,5 Z';
 
 export class FlatRouteMap {
   private readonly container: HTMLElement;
@@ -129,7 +138,7 @@ export class FlatRouteMap {
   }
 
   /** (Re)draws the route. */
-  setRoute(origin: LatLon, dest: LatLon, options: FlatRouteOptions = {}): void {
+  setRoute(origin: FlatRoutePoint, dest: FlatRoutePoint, options: FlatRouteOptions = {}): void {
     this.routeStart = null;
     this.clearRoutes();
     const ns = 'http://www.w3.org/2000/svg';
@@ -177,6 +186,10 @@ export class FlatRouteMap {
       this.routeGroup.appendChild(marker);
     }
 
+    // City-name labels (only when the caller provides names).
+    if (origin.name) this.addLabel(x1, y1, origin.name);
+    if (dest.name) this.addLabel(x2, y2, dest.name);
+
     this.frameRoute(x1, y1, x2, y2, bulge);
     // restart the plane flight
     this.routeStart = performance.now();
@@ -221,6 +234,27 @@ export class FlatRouteMap {
     const tx = vw / 2 - ((minX + maxX) / 2) * scale;
     const ty = vh / 2 - ((minY + maxY) / 2) * scale;
     this.stage.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+  }
+
+  /** Adds a haloed city-name label near an endpoint marker. */
+  private addLabel(x: number, y: number, text: string): void {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    el.setAttribute('x', String(x + 12));
+    el.setAttribute('y', String(y - 12));
+    el.setAttribute(
+      'font-family',
+      "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+    );
+    el.setAttribute('font-size', '24');
+    el.setAttribute('font-weight', '600');
+    el.setAttribute('fill', this.theme.marker);
+    // Paint the stroke first so it acts as a halo around the glyphs.
+    el.setAttribute('stroke', this.theme.bg);
+    el.setAttribute('stroke-width', '6');
+    el.setAttribute('stroke-linejoin', 'round');
+    el.setAttribute('paint-order', 'stroke');
+    el.textContent = text;
+    this.routeGroup.appendChild(el);
   }
 
   private buildPlane(): void {

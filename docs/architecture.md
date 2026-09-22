@@ -36,7 +36,8 @@ src/
 │   ├── RouteLayer.ts         Tubes, markers, pulses; update(time)
 │   ├── PlaneScheduler.ts     Flight/pause/repeat timing — pure
 │   ├── planeSilhouette.ts    Airplane path data (pure) + canvas renderer
-│   └── PlaneLayer.ts         Sprite following the outbound arc
+│   ├── PlaneLayer.ts         Sprite following the outbound arc
+│   └── EndpointLabels.ts     DOM pin badges + projection (projectPin, pure)
 ├── flat/
 │   └── FlatRouteMap.ts       No-WebGL fallback (canvas dots + SVG routes)
 └── data/
@@ -65,10 +66,28 @@ src/
 - The rendered arc lifts the path off the surface with
   `radius(t) = 1 + lift·sin(πt)` — endpoints on the surface, peak at the
   midpoint (the airline-map "bulge").
-- Round trips: `outboundLift` 0.18 vs `returnLift` 0.34. Same great circle,
+- Round trips: `outboundLift` 0.10 vs `returnLift` 0.20. Same great circle,
   different lift ⇒ two non-overlapping curves that read as "there and back".
 - `GreatCircleCurve` evaluates the same math directly (no sampled arrays) and
-  feeds `TubeGeometry(128 segments, radius 0.0035)`.
+  feeds `TubeGeometry(128 segments, radius 0.0022)`.
+
+## Endpoint pin badges
+
+`EndpointLabels` overlays DOM pin badges (pill + stem + dot) at the route
+endpoints. `projectPin(v, camera, w, h)` is pure math — world point → camera
+(view) space → projection matrix — and returns NDC-derived container pixels
+plus a `visible` flag. Two gotchas baked in:
+
+- `Vector3.applyMatrix4` already performs the homogeneous divide, so the
+  result is NDC directly — dividing again (by clip.z or clip.w) skews every
+  off-centre position by the near/far-plane terms.
+- Visibility is a facing test `dot(anchorDir, cameraDir) ≥ 0.12`, so a badge
+  fades just before its anchor reaches the limb rather than floating in empty
+  space.
+
+The overlay layer is `pointer-events: none` and theme-scoped (`.rd-pin-light`
+/ `.rd-pin-dark` CSS variables); the flat fallback renders the names as haloed
+SVG `<text>` instead (same `FlatRoutePoint.name` input).
 
 ## The arc shader (tube UVs)
 

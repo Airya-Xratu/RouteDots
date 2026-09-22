@@ -12,7 +12,14 @@
 import * as THREE from 'three';
 import { latLngToVec } from '../core/greatCircle.js';
 import type { LatLon } from '../types.js';
-import { buildRoute, type RouteArcSpec, type RouteSpec } from './RouteModel.js';
+import {
+  DEFAULT_ARC_RADIUS,
+  DEFAULT_OUTBOUND_LIFT,
+  DEFAULT_RETURN_LIFT,
+  buildRoute,
+  type RouteArcSpec,
+  type RouteSpec,
+} from './RouteModel.js';
 import { GreatCircleCurve } from './GreatCircleCurve.js';
 import { ROUTE_FRAGMENT, ROUTE_VERTEX } from './routeShader.js';
 
@@ -40,11 +47,11 @@ export const ROUTE_THEMES: Record<'light' | 'dark', RouteLayerTheme> = {
 
 export interface RouteLayerOptions {
   theme?: 'light' | 'dark';
-  /** Outbound lift (default 0.18). */
+  /** Outbound lift (default 0.10). */
   outboundLift?: number;
-  /** Return lift (default 0.34). */
+  /** Return lift (default 0.20). */
   returnLift?: number;
-  /** Arc tube radius in globe units (default 0.0035). */
+  /** Arc tube radius in globe units (default 0.0022). */
   arcRadius?: number;
   /** Duration of the draw-on animation per arc (ms, default 1100). */
   drawDurationMs?: number;
@@ -87,9 +94,9 @@ export class RouteLayer {
     this.theme = ROUTE_THEMES[theme];
     this.options = {
       theme,
-      outboundLift: options.outboundLift ?? 0.18,
-      returnLift: options.returnLift ?? 0.34,
-      arcRadius: options.arcRadius ?? 0.0035,
+      outboundLift: options.outboundLift ?? DEFAULT_OUTBOUND_LIFT,
+      returnLift: options.returnLift ?? DEFAULT_RETURN_LIFT,
+      arcRadius: options.arcRadius ?? DEFAULT_ARC_RADIUS,
       drawDurationMs: options.drawDurationMs ?? 1100,
       staggerMs: options.staggerMs ?? 350,
       pulse: options.pulse ?? true,

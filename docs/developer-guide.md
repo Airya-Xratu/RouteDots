@@ -60,7 +60,7 @@ Or import the ESM build from a CDN:
 | `autoRotate`  | `{ enabled?, speed? }`                                                            | on, 0.4°/s                               | Gentle idle rotation.                                  |
 | `interactive` | `boolean`                                                                         | `false`                                  | Allow pointer drag + wheel zoom.                       |
 | `texture`     | `{ stepDeg?, resDeg?, dotSizeDeg?, width? }`                                      | 1.5 / auto / 0.45 / 2048                 | Dot lattice & texture options.                         |
-| `route`       | `{ outboundLift?, returnLift?, arcRadius?, drawDurationMs?, staggerMs?, pulse? }` | 0.18 / 0.34 / 0.0035 / 1100 / 350 / true | Arc geometry & animation.                              |
+| `route`       | `{ outboundLift?, returnLift?, arcRadius?, drawDurationMs?, staggerMs?, pulse? }` | 0.10 / 0.20 / 0.0022 / 1100 / 350 / true | Arc geometry & animation.                              |
 | `plane`       | `PlaneLayerOptions & { enabled? }`                                                | on                                       | Animated plane (see below).                            |
 | `frameRoute`  | `boolean`                                                                         | `true`                                   | Pan/zoom the camera to frame each new route.           |
 | `fallback`    | `{ enabled? }`                                                                    | `true`                                   | Use the flat map when WebGL is unavailable.            |
@@ -140,7 +140,7 @@ changes, `dispose()` on unmount.
 ## Behaviour notes
 
 - **Outbound/return separation.** Round trips render two arcs with different
-  lifts (`outboundLift` 0.18 vs `returnLift` 0.34 of the globe radius). Both
+  lifts (`outboundLift` 0.10 vs `returnLift` 0.20 of the globe radius). Both
   follow the `1 + lift·sin(πt)` great-circle profile, so they share endpoints
   but never overlap.
 - **Frame routing.** On `setRoute`, the camera tweens (1.4 s, ease-out) to the
@@ -153,6 +153,11 @@ changes, `dispose()` on unmount.
 - **Flat fallback.** Without WebGL, `FlatRouteMap` renders the same dot
   lattice as a 2D equirectangular map with curved SVG routes (outbound up,
   return down) and an animated plane — the public API is unchanged.
+- **Endpoint pins.** In WebGL mode each endpoint gets a DOM pin badge
+  (pill + stem + dot, `.rd-pin-*` classes) that is re-projected every frame
+  and fades out when it rotates to the far hemisphere. In flat mode the city
+  name renders as a haloed SVG label next to the marker. Badge colours follow
+  the active theme.
 
 ## Customisation recipes
 

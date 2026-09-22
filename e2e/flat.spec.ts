@@ -31,6 +31,12 @@ test('flat fallback draws both routes and flies the plane', async ({ page }) => 
   expect(counts.markers).toBe(2);
   expect(counts.dashed).toBe(true);
 
+  // Named endpoints render city-name labels.
+  const labels = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('svg text')).map((t) => t.textContent),
+  );
+  expect(labels).toEqual(['London', 'Dubai']);
+
   // The plane animates along the outbound path.
   const readPlaneTransform = () =>
     page.evaluate(() => {

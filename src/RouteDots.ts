@@ -23,6 +23,7 @@ import {
 import type { ViewState } from './globe/cameraRig.js';
 import { RouteLayer, type RouteLayerOptions } from './routes/RouteLayer.js';
 import { PlaneLayer, type PlaneLayerOptions } from './routes/PlaneLayer.js';
+import { EndpointLabels } from './routes/EndpointLabels.js';
 import { FlatRouteMap, type FlatRouteMapOptions } from './flat/FlatRouteMap.js';
 import { angularDistance, DEG, greatCircleMidpoint } from './core/greatCircle.js';
 import type { TopoLand } from './core/topojson.js';
@@ -78,6 +79,7 @@ export class RouteDots {
   private globe: GlobeRenderer | null = null;
   private layer: RouteLayer | null = null;
   private plane: PlaneLayer | null = null;
+  private pins: EndpointLabels | null = null;
   private flat: FlatRouteMap | null = null;
 
   private readonly options: Required<Pick<RouteDotsOptions, 'theme'>> & RouteDotsOptions;
@@ -140,6 +142,10 @@ export class RouteDots {
         const outbound = spec.arcs[0]!;
         this.plane.setArc(outbound.from, outbound.to, outbound.lift, performance.now());
       }
+      this.pins?.setPoints([
+        { name: a.name, lat: a.lat, lng: a.lng },
+        { name: b.name, lat: b.lat, lng: b.lng },
+      ]);
       if (this.options.frameRoute !== false) this.frameRoute(a, b);
     } else if (this._mode === 'flat' && this.flat) {
       this.flat.setRoute(a, b, { roundTrip });
@@ -153,6 +159,7 @@ export class RouteDots {
     this.route = null;
     if (this._mode === 'webgl' && this.layer) this.layer.clear();
     this.plane?.clear();
+    this.pins?.clear();
     this.emit('route:cleared');
   }
 
@@ -267,15 +274,28 @@ export class RouteDots {
       });
     }
 
+    this.pins = new EndpointLabels(
+      this.container,
+      this.globe.camera,
+      () => [
+        this.globe!.renderer.domElement.clientWidth,
+        this.globe!.renderer.domElement.clientHeight,
+      ],
+      o.theme,
+    );
+
     this.globe.onFrame((time) => {
       this.layer?.update(time);
       if (this.plane) this.plane.update(time, this.globe!.camera);
+      this.pins?.update();
     });
   }
 
   private unmountWebGL(): void {
     this.plane?.dispose();
     this.plane = null;
+    this.pins?.dispose();
+    this.pins = null;
     this.layer?.dispose();
     this.layer = null;
     this.globe?.dispose();
