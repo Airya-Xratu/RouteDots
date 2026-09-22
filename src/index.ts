@@ -26,3 +26,9 @@ export * from './globe/cameraRig.js';
 export * from './globe/dotTexture.js';
 export * from './globe/atmosphere.js';
 export * from './globe/GlobeRenderer.js';
+
+// Route layer (three.js)
+export * from './routes/RouteModel.js';
+export * from './routes/GreatCircleCurve.js';
+export * from './routes/routeShader.js';
+export * from './routes/RouteLayer.js';
