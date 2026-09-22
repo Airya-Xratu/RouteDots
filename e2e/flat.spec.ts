@@ -17,17 +17,20 @@ test('flat fallback draws both routes and flies the plane', async ({ page }) => 
   const state = await page.evaluate(() => (window as unknown as Hooks).__state);
   expect(state.error, `fixture error: ${state.error}`).toBeNull();
 
-  // Two route paths (outbound + return) and two endpoint markers.
+  // Two route paths (outbound + return) and two endpoint markers; the
+  // outbound strokes slightly heavier than the return.
   const counts = await page.evaluate(() => {
     const svg = document.querySelector('svg');
     const routes = svg?.querySelectorAll('path[stroke]') ?? [];
     return {
       paths: routes.length,
+      widths: Array.from(routes).map((p) => p.getAttribute('stroke-width')),
       markers: svg?.querySelectorAll('circle').length ?? 0,
       dashed: Array.from(routes).every((p) => p.getAttribute('stroke-dasharray')?.includes(' ')),
     };
   });
   expect(counts.paths).toBe(2);
+  expect(counts.widths).toEqual(['1.8', '1.4']);
   expect(counts.markers).toBe(2);
   expect(counts.dashed).toBe(true);
 

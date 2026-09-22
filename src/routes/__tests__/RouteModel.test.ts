@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_OUTBOUND_LIFT, DEFAULT_RETURN_LIFT, buildRoute } from '../RouteModel.js';
+import {
+  DEFAULT_ARC_RADIUS,
+  DEFAULT_OUTBOUND_LIFT,
+  DEFAULT_RETURN_LIFT,
+  buildRoute,
+} from '../RouteModel.js';
 import type { LatLon } from '../../types.js';
+
+describe('defaults', () => {
+  it('use the thinner route tube', () => {
+    expect(DEFAULT_ARC_RADIUS).toBe(0.0015);
+  });
+});
 
 const LHR: LatLon = { lat: 51.507, lng: -0.128 };
 const DXB: LatLon = { lat: 25.204, lng: 55.271 };

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Routes read lighter and finer, per design feedback:
+  - Arc tubes are thinner: default radius `0.0022 → 0.0015`.
+  - Light-theme route colours are softened: outbound `#23262e → #4f5b6b`,
+    return `#6b7280 → #8a94a6`.
+  - Flat fallback strokes thin from 3 / 2.5 px to 1.8 / 1.4 px
+    (outbound / return).
+- The return arc now always renders above the outbound — depth-independent
+  painter layering (`renderOrder` outbound 1 / return 2 / pulses 3 / plane 4)
+  — so "there and back" stays readable where the arcs visually overlap; the
+  shared route shader adds a soft fade near the globe's limb so arcs melt
+  into the surface instead of clipping at the silhouette.
+- The plane's motion is eased with `easeInOutCubic` (gentle take-off and
+  landing; the fly/pause scheduler itself stays linear) and it flies a touch
+  higher above the arc (clearance `0.006 → 0.02`).
+
 ### Added
 
 - Country borders: a light border layer decoded from the bundled world-atlas

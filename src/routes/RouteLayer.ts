@@ -32,8 +32,8 @@ export interface RouteLayerTheme {
 
 export const ROUTE_THEMES: Record<'light' | 'dark', RouteLayerTheme> = {
   light: {
-    outbound: { color: '#23262e', opacity: 0.95 },
-    return: { color: '#6b7280', opacity: 0.8 },
+    outbound: { color: '#4f5b6b', opacity: 0.95 },
+    return: { color: '#8a94a6', opacity: 0.8 },
     marker: '#23262e',
     ring: '#23262e',
   },
@@ -51,7 +51,7 @@ export interface RouteLayerOptions {
   outboundLift?: number;
   /** Return lift (default 0.20). */
   returnLift?: number;
-  /** Arc tube radius in globe units (default 0.0022). */
+  /** Arc tube radius in globe units (default 0.0015). */
   arcRadius?: number;
   /** Duration of the draw-on animation per arc (ms, default 1100). */
   drawDurationMs?: number;
@@ -210,7 +210,10 @@ export class RouteLayer {
     });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.visible = false;
-    mesh.renderOrder = 1;
+    // Depth-independent painter layering: the return arc always draws above
+    // the outbound (order 1 / 2), pulses (3) and the plane (4) above both —
+    // "there and back" stays readable even where the arcs overlap.
+    mesh.renderOrder = 1 + spec.order;
     this.group.add(mesh);
     return { spec, mesh };
   }
@@ -243,7 +246,7 @@ export class RouteLayer {
         const v = latLngToVec(point.lat, point.lng, 1.002);
         ring.position.set(v[0], v[1], v[2]);
         ring.lookAt(v[0] * 2, v[1] * 2, v[2] * 2);
-        ring.renderOrder = 2;
+        ring.renderOrder = 3;
         this.group.add(ring);
         this.pulses.push({ mesh: ring, start: now + i * 150 + k * 750 });
       }
