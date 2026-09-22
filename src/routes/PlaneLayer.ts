@@ -7,7 +7,7 @@
  * scheduler is in its pause phase.
  */
 import * as THREE from 'three';
-import { latLngToVec, slerp, type Vec3 } from '../core/greatCircle.js';
+import { latLngToVec, slerp, vecToLatLng, type Vec3 } from '../core/greatCircle.js';
 import type { LatLon } from '../types.js';
 import { easeInOutCubic } from './easing.js';
 import { PlaneScheduler } from './PlaneScheduler.js';
@@ -84,10 +84,20 @@ export class PlaneLayer {
   }
 
   private lastProgress: number | null = null;
+  private lastGround: LatLon | null = null;
 
   /** Route progress of the last frame: 0→1 while flying, null while paused. */
   getProgress(): number | null {
     return this.lastProgress;
+  }
+
+  /**
+   * Ground position (lat/lng) of the plane's last frame — held during the
+   * pause phase so camera tracking doesn't jump — or null before the first
+   * flight.
+   */
+  getGroundPosition(): LatLon | null {
+    return this.lastGround ? { ...this.lastGround } : null;
   }
 
   /** Advances the plane. `timeMs` is the frame timestamp. */
@@ -106,6 +116,7 @@ export class PlaneLayer {
     const s = slerp(this.va, this.vb, t);
     const f = 1 + (this.lift + this.clearance) * Math.sin(Math.PI * t);
     this.sprite.position.set(s[0] * f, s[1] * f, s[2] * f);
+    this.lastGround = vecToLatLng(s);
     this.sprite.visible = true;
 
     // Heading: project a short tangent into camera space.
@@ -132,6 +143,7 @@ export class PlaneLayer {
     this.va = null;
     this.vb = null;
     this.lastProgress = null;
+    this.lastGround = null;
     this.sprite.visible = false;
   }
 

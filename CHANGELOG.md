@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Camera tracking: the globe follows the plane. While a route is set, idle
+  auto-rotation pauses and the camera eases back toward the plane whenever
+  its ground position leaves the visible disc — the threshold is the visible
+  horizon for the current camera altitude minus 5°, and the chase is an
+  exponential ease (`1 − e^(−k·dt)`), so the plane can never slip behind the
+  limb. Manual drags and `setView` tweens always win; `clearRoute` resumes
+  idle rotation.
+  - Pure, unit-tested policy in `src/routes/cameraTracking.ts`
+    (`trackCamera`, `visibleHorizonDeg`, `trackingThresholdDeg`).
+  - New public API (WebGL mode): `RouteDots.getCameraState()` and
+    `RouteDots.setView(view, durationMs?)`.
+  - New `e2e/tracking.spec.ts` + fixture covering hold, tween priority,
+    ease-back and rotation resume on a real WebGL canvas.
+
 ### Changed
 
 - Routes read lighter and finer, per design feedback:

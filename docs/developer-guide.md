@@ -72,14 +72,16 @@ Or import the ESM build from a CDN:
 
 ### Methods
 
-| Method                                        | Description                                                                              |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `setRoute(from, to, { roundTrip? }): boolean` | Draws the route (arc(s) + markers + pulse + plane), pans the camera to frame it.         |
-| `getRoute(): RouteDotsRouteInfo \| null`      | Resolved `{ from, to, roundTrip }` of the current route.                                 |
-| `clearRoute()`                                | Removes arcs/markers/pulses/plane.                                                       |
-| `setTheme('light' \| 'dark')`                 | Switches theme at runtime (re-renders the current route).                                |
-| `resize()`                                    | Re-fits the renderer to the container (also handled automatically via `ResizeObserver`). |
-| `dispose()`                                   | Tears everything down (RAF, listeners, GPU resources, DOM).                              |
+| Method                                        | Description                                                                                       |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `setRoute(from, to, { roundTrip? }): boolean` | Draws the route (arc(s) + markers + pulse + plane), pans the camera to frame it.                  |
+| `getRoute(): RouteDotsRouteInfo \| null`      | Resolved `{ from, to, roundTrip }` of the current route.                                          |
+| `clearRoute()`                                | Removes arcs/markers/pulses/plane.                                                                |
+| `getCameraState(): ViewState \| null`         | Current camera `{ lat, lng, altitude }` (WebGL mode; `null` in flat mode).                        |
+| `setView(view, durationMs?)`                  | Animates the camera to a view (WebGL mode; no-op in flat mode). Overrides tracking while it runs. |
+| `setTheme('light' \| 'dark')`                 | Switches theme at runtime (re-renders the current route).                                         |
+| `resize()`                                    | Re-fits the renderer to the container (also handled automatically via `ResizeObserver`).          |
+| `dispose()`                                   | Tears everything down (RAF, listeners, GPU resources, DOM).                                       |
 
 ### Events
 

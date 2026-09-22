@@ -118,6 +118,13 @@ route's great-circle midpoint at an altitude that grows with route length
 (1.35 + dist°/90, clamped 1.4–2.4) — this is the "globe moves to the
 destination" behaviour.
 
+While a route is set, horizon-aware tracking (`cameraTracking.ts`, pure)
+keeps the plane in view: idle auto-rotation pauses, and whenever the plane's
+ground position leaves the visible disc (horizon for the camera altitude
+minus a 5° margin) the camera eases back toward it by `1 − e^(−k·dt)`.
+Manual drags and `setView` tweens always win; `clearRoute` stands the
+tracker down and resumes idle rotation.
+
 ## The plane
 
 `PlaneScheduler` (pure) maps time → progress: fly `flightMs`, pause `pauseMs`,
