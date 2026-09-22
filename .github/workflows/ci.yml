@@ -40,4 +40,20 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - name: Run e2e (debug: report tail to PR comment)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          npm run test:e2e > /tmp/e2e-full.txt 2>&1
+          CODE=$?
+          set -e
+          PR=$(gh pr view --json number -q .number || echo 12)
+          {
+            echo "e2e exit code: ${CODE}"
+            echo '```'
+            tail -80 /tmp/e2e-full.txt
+            echo '```'
+          } > /tmp/pr-note.md
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" -f body="$(cat /tmp/pr-note.md)"
+          exit $CODE
