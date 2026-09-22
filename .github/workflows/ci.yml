@@ -10,6 +10,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# TEMP (debug): needed so the e2e debug step can push its output to the
+# branch. Remove together with the debug step.
+permissions:
+  contents: write
+
 jobs:
   quality:
     name: Lint · typecheck · test · build
@@ -40,25 +45,35 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - name: 'Run e2e (debug: commit output to branch)'
+      - name: Run e2e (debug)
         run: |
-          set -e
-          npm run test:e2e > /tmp/e2e-full.txt 2>&1 || CODE=$?
-          CODE=${CODE:-0}
+          if npm run test:e2e > /tmp/e2e-full.txt 2>&1; then
+            echo OK > /tmp/e2e-status
+          else
+            echo FAIL > /tmp/e2e-status
+          fi
+      - name: Push e2e output (debug, never fails)
+        run: |
+          set +e
           {
-            echo "e2e exit code: ${CODE}"
+            echo "e2e status: $(cat /tmp/e2e-status 2>/dev/null)"
             echo '```'
-            cat /tmp/e2e-full.txt
+            cat /tmp/e2e-full.txt 2>/dev/null
             echo '```'
           } > e2e-debug-output.md
-          # Push the debug file to the branch only if it is not there yet,
-          # so follow-up CI runs do not loop.
           if [ ! -f e2e-debug-output-pushed.marker ]; then
             git config user.name "ci-debug"
             git config user.email "ci-debug@users.noreply.github.com"
             touch e2e-debug-output-pushed.marker
             git add e2e-debug-output.md e2e-debug-output-pushed.marker
             git commit -m "chore(ci): temporary e2e debug output"
-            git push origin "HEAD:${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" || echo "DEBUG PUSH FAILED"
+            git push origin "HEAD:${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+            echo "push exit: $?"
           fi
-          exit "${CODE}"
+          exit 0
+      - name: Fail if e2e failed (debug)
+        run: |
+          if [ "$(cat /tmp/e2e-status)" != "OK" ]; then
+            echo "e2e tests failed — see e2e-debug-output.md on the branch"
+            exit 1
+          fi
