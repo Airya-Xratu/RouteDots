@@ -30,6 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Showcase: the search form now reports the drawn route in a live status
   hint (`London → Dubai · round trip · Sep 22`), and the date field keeps the
   hint in sync. The error hint restores this status instead of clearing it.
+
+### Fixed
+
+- CI: the workflow file was rejected by GitHub at dispatch time (`hashFiles`
+  is not allowed in a job-level `if`), so every CI run — including `quality`
+  — failed in 0 s without running a single step. Dropped the tautological
+  guard; the Playwright config is committed, so the e2e job always runs.
 - Route arcs are thinner and hug the globe more closely for a more accurate
   look: default tube radius `0.0035 → 0.0022` and default lifts
   `0.18 / 0.34 → 0.10 / 0.20` (outbound / return).
