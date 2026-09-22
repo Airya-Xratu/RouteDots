@@ -73,7 +73,7 @@ src/
 - Round trips: `outboundLift` 0.10 vs `returnLift` 0.20. Same great circle,
   different lift ⇒ two non-overlapping curves that read as "there and back".
 - `GreatCircleCurve` evaluates the same math directly (no sampled arrays) and
-  feeds `TubeGeometry(128 segments, radius 0.0022)`.
+  feeds `TubeGeometry(128 segments, radius 0.0015)`.
 
 ## Endpoint pin badges
 
@@ -121,10 +121,20 @@ destination" behaviour.
 ## The plane
 
 `PlaneScheduler` (pure) maps time → progress: fly `flightMs`, pause `pauseMs`,
-repeat. `PlaneLayer` positions a sprite on the outbound arc
-(`slerp` + `lift + clearance`), and orients it by projecting a short tangent
-into camera space (`rotation = atan2(dy, dx) - 90°`). The sprite is hidden
-during the pause phase and behind the globe (depth test on).
+repeat. The schedule stays linear; `PlaneLayer` eases the _motion_ with
+`easeInOutCubic` so the plane lifts off and lands gently, positions the sprite
+on the outbound arc (`slerp` + `lift + clearance`), and orients it by
+projecting a short tangent into camera space
+(`rotation = atan2(dy, dx) - 90°`). The sprite is hidden during the pause
+phase and behind the globe (depth test on).
+
+## Route layering
+
+Tubes are drawn depth-independent (no depth write) in explicit painter order:
+outbound `renderOrder` 1, return 2 — so "there and back" stays readable where
+the arcs overlap — pulses 3, plane sprite 4. The shared route shader adds a
+soft limb fade near the globe's visible edge so arcs melt into the surface
+instead of hard-clipping at the silhouette.
 
 ## Flat fallback
 

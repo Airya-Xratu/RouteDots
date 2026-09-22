@@ -176,7 +176,7 @@ export class FlatRouteMap {
 
     const outbound = makePath(x1, y1, x2, y2, -bulge);
     outbound.setAttribute('stroke', this.theme.outbound);
-    outbound.setAttribute('stroke-width', '3');
+    outbound.setAttribute('stroke-width', '1.8');
     outbound.setAttribute('stroke-linecap', 'round');
     outbound.setAttribute('stroke-dasharray', '10 7');
     this.routeGroup.appendChild(outbound);
@@ -185,7 +185,7 @@ export class FlatRouteMap {
     if (options.roundTrip) {
       const ret = makePath(x2, y2, x1, y1, bulge * 1.25);
       ret.setAttribute('stroke', this.theme.return);
-      ret.setAttribute('stroke-width', '2.5');
+      ret.setAttribute('stroke-width', '1.4');
       ret.setAttribute('stroke-linecap', 'round');
       ret.setAttribute('stroke-dasharray', '7 8');
       this.routeGroup.appendChild(ret);

@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { latLngToVec, slerp, type Vec3 } from '../core/greatCircle.js';
 import type { LatLon } from '../types.js';
+import { easeInOutCubic } from './easing.js';
 import { PlaneScheduler } from './PlaneScheduler.js';
 import { drawPlane } from './planeSilhouette.js';
 
@@ -17,7 +18,7 @@ export interface PlaneLayerOptions {
   size?: number;
   /** Sprite colour (default #14161a). */
   color?: string;
-  /** Clear the plane above the arc by this many globe radii (default 0.006). */
+  /** Clear the plane above the arc by this many globe radii (default 0.02). */
   clearance?: number;
   flightMs?: number;
   pauseMs?: number;
@@ -39,7 +40,7 @@ export class PlaneLayer {
   private readonly tmp2 = new THREE.Vector3();
 
   constructor(parent: THREE.Object3D, options: PlaneLayerOptions = {}) {
-    this.clearance = options.clearance ?? 0.006;
+    this.clearance = options.clearance ?? 0.02;
     this.scheduler = new PlaneScheduler({
       flightMs: options.flightMs,
       pauseMs: options.pauseMs,
@@ -65,7 +66,9 @@ export class PlaneLayer {
     this.sprite = new THREE.Sprite(material);
     const size = options.size ?? 0.024;
     this.sprite.scale.set(size, size, 1);
-    this.sprite.renderOrder = 3;
+    // Painter order on the globe: borders 0 < outbound 1 < return 2 <
+    // pulses 3 < plane 4 (see RouteLayer) — the plane always flies on top.
+    this.sprite.renderOrder = 4;
     this.sprite.visible = false;
     parent.add(this.sprite);
   }
@@ -90,12 +93,15 @@ export class PlaneLayer {
   /** Advances the plane. `timeMs` is the frame timestamp. */
   update(timeMs: number, camera: THREE.Camera): void {
     if (!this.from || !this.to || !this.va || !this.vb) return;
-    const t = this.scheduler.progress(timeMs);
-    this.lastProgress = t;
-    if (t === null) {
+    // Scheduler stays linear; easing shapes the *motion* (gentle take-off
+    // and landing), not the fly/pause timing.
+    const raw = this.scheduler.progress(timeMs);
+    this.lastProgress = raw;
+    if (raw === null) {
       this.sprite.visible = false;
       return;
     }
+    const t = easeInOutCubic(raw);
 
     const s = slerp(this.va, this.vb, t);
     const f = 1 + (this.lift + this.clearance) * Math.sin(Math.PI * t);
