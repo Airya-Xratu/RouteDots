@@ -48,3 +48,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Playwright E2E setup with a WebGL smoke test: the dot globe renders in
   headless Chromium (opaque globe surface, transparent background) and the
   camera tween lands on the requested view.
+- Route arcs (`src/routes/`):
+  - `buildRoute` — pure route model: one-way = 1 arc, round trip = 2 arcs with
+    _different lifts_ (outbound 0.18, return 0.34) so the curves never
+    overlap; return endpoints reversed; rejects (near-)identical endpoints
+    across the antimeridian.
+  - `GreatCircleCurve` — three.js `Curve` evaluating the lifted great circle
+    (slerp + `1 + lift·sin(πt)`), used by the tube geometry.
+  - `RouteLayer` — renders one tube per arc with a custom shader: draw-on
+    animation (origin → destination, staggered for the return), flowing dashes
+    that travel in the arc's direction, end fades into the surface, endpoint
+    markers and pulse rings. Driven by the renderer's frame loop via
+    `update(time)`, with `onDrawn` callback and clean `dispose()`.
+  - `ROUTE_THEMES` (light/dark arc + marker colours); route modules exported
+    from the package root.
+- E2E: round-trip route renders in WebGL and reports `drawn`.
