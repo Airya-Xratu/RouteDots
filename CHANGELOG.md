@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Endpoint pin badges: each route endpoint now carries a labelled pin (pill +
+  stem + dot) with the city name.
+  - WebGL mode: a `EndpointLabels` DOM overlay (`src/routes/EndpointLabels.ts`)
+    re-projects the badges every frame and fades them out when their anchor
+    rotates to the far hemisphere. Projection is a pure, unit-tested function
+    (`projectPin`) with an independent ray-caster round-trip test.
+  - Flat fallback: city names render as haloed SVG labels next to the markers
+    (`FlatRoutePoint.name`).
+  - E2E asserts the pin names for the default LHR → DXB route and that they
+    follow destination changes.
+
+### Changed
+
+- Route arcs are thinner and hug the globe more closely for a more accurate
+  look: default tube radius `0.0035 → 0.0022` and default lifts
+  `0.18 / 0.34 → 0.10 / 0.20` (outbound / return).
+- The airplane silhouette is a friendlier, fully rounded outline (quad-curve
+  fuselage, swept wings with rounded tips, rounded tail) — applied to the
+  WebGL sprite texture and the flat-fallback SVG path.
+- `RouteLayer` now takes its default lift/radius from the shared
+  `RouteModel` constants instead of duplicating the numbers.
+
 ## [0.1.0] - 2026-09-22
 
 ### Added
