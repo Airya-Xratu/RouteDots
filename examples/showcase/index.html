@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale= 1" />
+    <title>RouteDots — see your journey before you book it</title>
+    <style>
+      :root {
+        --ink: #1c1e22;
+        --muted: #6b7280;
+        --panel: #232428;
+        --panel-edge: #34353b;
+        --accent: #101114;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        color: var(--ink);
+        background: #f7f8fa;
+      }
+      nav {
+        position: absolute;
+        inset: 0 0 auto 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 22px 40px;
+        z-index: 3;
+      }
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        font-size: 17px;
+        letter-spacing: -0.01em;
+      }
+      .logo .dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 35%, #4b5563, #111827);
+        box-shadow: 0 0 0 4px rgba(17, 24, 39, 0.08);
+      }
+      .nav-links {
+        display: flex;
+        gap: 26px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .nav-links span {
+        cursor: default;
+      }
+
+      .hero {
+        position: relative;
+        height: 100vh;
+        min-height: 640px;
+        overflow: hidden;
+      }
+      #globe {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(1200px 700px at 70% 30%, #ffffff 0%, #f2f4f8 70%, #eef0f4 100%);
+      }
+      .hero-copy {
+        position: absolute;
+        top: 118px;
+        left: 40px;
+        max-width: 520px;
+        z-index: 2;
+        pointer-events: none;
+      }
+      .hero-copy h1 {
+        margin: 0 0 10px;
+        font-size: clamp(26px, 3.4vw, 40px);
+        line-height: 1.12;
+        letter-spacing: -0.02em;
+      }
+      .hero-copy p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 15.5px;
+        line-height: 1.5;
+      }
+
+      .panel {
+        position: absolute;
+        left: 40px;
+        bottom: 40px;
+        width: 360px;
+        background: var(--panel);
+        border-radius: 18px;
+        padding: 22px 22px 20px;
+        color: #e8e9ec;
+        box-shadow: 0 24px 60px rgba(20, 22, 28, 0.28);
+        z-index: 3;
+      }
+      .panel .passengers {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+      .panel .passengers .label {
+        font-size: 11.5px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #9aa0aa;
+      }
+      .panel .passengers .value {
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .panel .passengers .value small {
+        color: #9aa0aa;
+        font-weight: 400;
+      }
+
+      .fields {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        gap: 8px;
+        align-items: center;
+      }
+      .field label {
+        display: block;
+        font-size: 11px;
+        color: #9aa0aa;
+        margin-bottom: 5px;
+        letter-spacing: 0.04em;
+      }
+      select,
+      input[type='date'] {
+        width: 100%;
+        appearance: none;
+        background: #17181c;
+        color: #e8e9ec;
+        border: 1px solid var(--panel-edge);
+        border-radius: 10px;
+        padding: 10px 10px;
+        font-size: 13.5px;
+        outline: none;
+      }
+      select:focus,
+      input:focus {
+        border-color: #4d4f57;
+      }
+      .swap {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 1px solid var(--panel-edge);
+        background: #17181c;
+        color: #9aa0aa;
+        cursor: pointer;
+        font-size: 14px;
+        line-height: 1;
+      }
+      .swap:hover {
+        color: #fff;
+        border-color: #55575f;
+      }
+
+      .row2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .trip {
+        display: flex;
+        background: #17181c;
+        border: 1px solid var(--panel-edge);
+        border-radius: 10px;
+        padding: 3px;
+      }
+      .trip button {
+        flex: 1;
+        border: 0;
+        background: transparent;
+        color: #9aa0aa;
+        font-size: 12.5px;
+        padding: 7px 0;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+      .trip button.active {
+        background: #2c2d33;
+        color: #fff;
+        font-weight: 600;
+      }
+
+      .search {
+        margin-top: 16px;
+        width: 100%;
+        border: 1px solid #45464d;
+        background: #17181c;
+        color: #fff;
+        font-size: 14.5px;
+        font-weight: 600;
+        padding: 13px 0;
+        border-radius: 999px;
+        cursor: pointer;
+        transition:
+          background 120ms ease,
+          border-color 120ms ease;
+      }
+      .search:hover {
+        background: #202127;
+        border-color: #5a5c64;
+      }
+      .hint {
+        margin-top: 10px;
+        text-align: center;
+        font-size: 11.5px;
+        color: #7d828c;
+        min-height: 15px;
+      }
+      .hint.error {
+        color: #fca5a5;
+      }
+
+      .badge {
+        position: absolute;
+        right: 28px;
+        bottom: 28px;
+        z-index: 3;
+        font-size: 12px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(4px);
+        border: 1px solid #e5e7eb;
+        padding: 7px 12px;
+        border-radius: 999px;
+      }
+
+      .features {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 72px 32px 40px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 28px;
+      }
+      .features h2 {
+        grid-column: 1 / -1;
+        margin: 0 0 4px;
+        font-size: 26px;
+        letter-spacing: -0.01em;
+      }
+      .features .sub {
+        grid-column: 1 / -1;
+        color: var(--muted);
+        margin: 0 0 8px;
+        font-size: 15px;
+      }
+      .feature {
+        border-top: 2px solid #e8eaee;
+        padding-top: 16px;
+      }
+      .feature h3 {
+        margin: 0 0 6px;
+        font-size: 15.5px;
+      }
+      .feature p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13.5px;
+        line-height: 1.55;
+      }
+
+      .integrate {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 24px 32px 72px;
+      }
+      .integrate h2 {
+        font-size: 26px;
+        letter-spacing: -0.01em;
+        margin: 0 0 8px;
+      }
+      .integrate p {
+        color: var(--muted);
+        font-size: 15px;
+        max-width: 640px;
+      }
+      pre {
+        background: #17181c;
+        color: #d7dae0;
+        border-radius: 14px;
+        padding: 20px 22px;
+        font-size: 13px;
+        line-height: 1.6;
+        overflow: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      footer {
+        border-top: 1px solid #e8eaee;
+        padding: 22px 32px 30px;
+        color: var(--muted);
+        font-size: 13px;
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      @media (max-width: 760px) {
+        .panel {
+          left: 16px;
+          right: 16px;
+          bottom: 16px;
+          width: auto;
+        }
+        .hero-copy {
+          top: 90px;
+          left: 16px;
+          right: 16px;
+        }
+        .nav {
+          padding: 16px 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <section class="hero">
+      <div id="globe" aria-label="Dot globe showing the selected flight route"></div>
+
+      <nav>
+        <div class="logo"><span class="dot"></span> RouteDots</div>
+        <div class="nav-links"><span>Flights</span><span>Deals</span><span>Help</span></div>
+      </nav>
+
+      <div class="hero-copy">
+        <h1>See your journey before you book it.</h1>
+        <p>
+          Pick a departure and a destination — your route draws itself across a real, spherical dot
+          globe, with the return path separated for round trips.
+        </p>
+      </div>
+
+      <div class="panel" role="form" aria-label="Flight search">
+        <div class="passengers">
+          <span class="label">Passengers</span>
+          <span class="value">2 Adults <small>·</small> 1 Child</span>
+        </div>
+
+        <div class="fields">
+          <div class="field">
+            <label for="from">From</label>
+            <select id="from" aria-label="Departure city"></select>
+          </div>
+          <button class="swap" id="swap" type="button" title="Swap cities" aria-label="Swap cities">
+            ⇄
+          </button>
+          <div class="field">
+            <label for="to">To</label>
+            <select id="to" aria-label="Destination city"></select>
+          </div>
+        </div>
+
+        <div class="row2">
+          <div class="field">
+            <label for="date">Departure</label>
+            <input type="date" id="date" />
+          </div>
+          <div class="field">
+            <label>Route</label>
+            <div class="trip" role="tablist">
+              <button type="button" id="one-way" role="tab">One way</button>
+              <button type="button" id="round-trip" role="tab" class="active">Round trip</button>
+            </div>
+          </div>
+        </div>
+
+        <button class="search" id="search" type="button">Search Flights</button>
+        <div class="hint" id="hint"></div>
+      </div>
+
+      <div class="badge">Interactive demo · <span id="mode">…</span></div>
+    </section>
+
+    <section class="features">
+      <h2>Why RouteDots</h2>
+      <p class="sub">
+        The flight-route visual your hero deserves — no API keys, no map tiles, no flat map.
+      </p>
+      <div class="feature">
+        <h3>🌍 A real sphere</h3>
+        <p>
+          The globe is spherical, not flat. When your destination is off screen, the camera pans
+          across the surface to frame the route.
+        </p>
+      </div>
+      <div class="feature">
+        <h3>➰ Curved arcs</h3>
+        <p>
+          Routes follow lifted great circles — the classic airline-map bulge — never straight lines.
+        </p>
+      </div>
+      <div class="feature">
+        <h3>⇄ Outbound ≠ return</h3>
+        <p>Round trips draw two arcs with different lifts, so there and back never overlap.</p>
+      </div>
+      <div class="feature">
+        <h3>✈️ A plane on repeat</h3>
+        <p>
+          A small airliner flies the outbound arc on a repeating interval, oriented along the track.
+        </p>
+      </div>
+      <div class="feature">
+        <h3>🪶 Feathers light</h3>
+        <p>
+          One dependency (three.js), a bundled 110m land mask, ~9 kB gz of RouteDots core, and a
+          flat 2D fallback when WebGL is unavailable.
+        </p>
+      </div>
+    </section>
+
+    <section class="integrate">
+      <h2>Drop it into your hero</h2>
+      <p>One element, one call. Works with any stack — here is the whole integration:</p>
+      <pre>
+&lt;div id="hero-globe"&gt;&lt;/div&gt;
+&lt;script type="module"&gt;
+  import { RouteDots } from 'routedots'; // or the IIFE: &lt;script src="routedots.browser.global.js"&gt;
+
+  const rd = new RouteDots(document.getElementById('hero-globe'), {
+    theme: 'light',
+    autoRotate: { enabled: true, speed: 0.4 },
+  });
+
+  // From your flight form:
+  document.getElementById('search').addEventListener('click', () =&gt; {
+    rd.setRoute('LHR', 'DXB', { roundTrip: true });
+  });
+&lt;/script&gt;</pre>
+    </section>
+
+    <footer>
+      <span>RouteDots · MIT License · world data: Natural Earth (public domain)</span>
+      <span
+        ><a href="https://github.com/Airya-Xratu/RouteDots"
+          >github.com/Airya-Xratu/RouteDots</a
+        ></span
+      >
+    </footer>
+
+    <script src="../../dist/routedots.browser.global.js"></script>
+    <script>
+      (function () {
+        const { RouteDots } = window.RouteDots;
+
+        const fromSel = document.getElementById('from');
+        const toSel = document.getElementById('to');
+        const dateEl = document.getElementById('date');
+        const oneWay = document.getElementById('one-way');
+        const roundTrip = document.getElementById('round-trip');
+        const swapBtn = document.getElementById('swap');
+        const searchBtn = document.getElementById('search');
+        const hint = document.getElementById('hint');
+        const modeEl = document.getElementById('mode');
+
+        // Build grouped city selects
+        const regions = {};
+        for (const city of RouteDots.CITIES) {
+          (regions[city.country] ??= []).push(city);
+        }
+        const fill = (sel) => {
+          sel.innerHTML = '';
+          const groups = Object.entries(regions).sort(([a], [b]) => a.localeCompare(b));
+          for (const [country, cities] of groups) {
+            const og = document.createElement('optgroup');
+            og.label = country;
+            for (const city of cities) {
+              const opt = document.createElement('option');
+              opt.value = city.code;
+              opt.textContent = `${city.name} (${city.code})`;
+              og.appendChild(opt);
+            }
+            sel.appendChild(og);
+          }
+        };
+        fill(fromSel);
+        fill(toSel);
+        fromSel.value = 'LHR';
+        toSel.value = 'DXB';
+
+        const today = new Date();
+        dateEl.value = today.toISOString().slice(0, 10);
+        dateEl.min = today.toISOString().slice(0, 10);
+
+        let trip = 'round';
+
+        const rd = new RouteDots(document.getElementById('globe'), {
+          theme: 'light',
+          view: { lat: 40, lng: 25, altitude: 1.9 },
+          autoRotate: { enabled: true, speed: 0.4 },
+          plane: { flightMs: 4800, pauseMs: 800 },
+        });
+        const modeText = (m) => (m === 'webgl' ? '3D globe (WebGL)' : 'flat map (no WebGL)');
+        modeEl.textContent = modeText(rd.mode);
+        rd.on('mode:changed', () => {
+          modeEl.textContent = modeText(rd.mode);
+        });
+        rd.on('route:invalid', () => {
+          hint.textContent = 'Pick two different cities.';
+          hint.classList.add('error');
+          setTimeout(() => {
+            hint.textContent = '';
+            hint.classList.remove('error');
+          }, 2500);
+        });
+        window.__rd = rd; // for E2E
+
+        const apply = () => {
+          const ok = rd.setRoute(fromSel.value, toSel.value, { roundTrip: trip === 'round' });
+          if (ok) {
+            hint.textContent = '';
+            hint.classList.remove('error');
+          }
+        };
+
+        fromSel.addEventListener('change', apply);
+        toSel.addEventListener('change', apply);
+        searchBtn.addEventListener('click', apply);
+
+        oneWay.addEventListener('click', () => {
+          trip = 'one';
+          oneWay.classList.add('active');
+          roundTrip.classList.remove('active');
+          apply();
+        });
+        roundTrip.addEventListener('click', () => {
+          trip = 'round';
+          roundTrip.classList.add('active');
+          oneWay.classList.remove('active');
+          apply();
+        });
+        swapBtn.addEventListener('click', () => {
+          const a = fromSel.value;
+          fromSel.value = toSel.value;
+          toSel.value = a;
+          apply();
+        });
+
+        // Default route after mount
+        rd.setRoute('LHR', 'DXB', { roundTrip: true });
+      })();
+    </script>
+  </body>
+</html>

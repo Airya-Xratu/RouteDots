@@ -38,3 +38,7 @@ export * from './routes/PlaneLayer.js';
 
 // No-WebGL flat fallback
 export * from './flat/FlatRouteMap.js';
+
+// Public API
+export * from './cities.js';
+export * from './RouteDots.js';

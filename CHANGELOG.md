@@ -79,3 +79,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - E2E: plane flight progress is monotonic in WebGL; the flat fallback draws
   both routes and animates the plane. Plane + flat modules exported from the
   package root.
+- Public API (`src/RouteDots.ts`): the `RouteDots` facade with city
+  resolution (`resolveCity`, 31-city bundled dataset), `setRoute` with
+  automatic camera framing (great-circle midpoint, altitude scaled by route
+  length), live theme switching, event emitter
+  (`ready`, `route:updated`, `route:drawn`, `route:invalid`, `route:cleared`,
+  `mode:changed`), `colors` passthrough, and clean `dispose()`.
+- Showcase project (`examples/showcase/`): a full airline hero with the dark
+  search panel (passengers, from/to grouped city selects, swap, date,
+  one-way/round-trip, Search Flights) driving the globe live; features strip
+  and integration snippet.
+- Docs: developer guide (full API reference + React example), architecture
+  guide (module map, texture pipeline, arc math, shaders, testing strategy),
+  README with screenshots.
