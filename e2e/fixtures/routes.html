@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RouteDots E2E fixture — routes</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      #globe {
+        position: fixed;
+        inset: 0;
+        background: #eef1f5;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="globe"></div>
+    <script src="../../dist/routedots.browser.global.js"></script>
+    <script>
+      window.__state = { ready: false, drawn: 0, error: null, webgl: null };
+      try {
+        const { GlobeRenderer, RouteLayer, supportsWebGL } = window.RouteDots;
+        window.__state.webgl = supportsWebGL();
+        const LHR = { lat: 51.507, lng: -0.128 };
+        const DXB = { lat: 25.204, lng: 55.271 };
+        const globe = new GlobeRenderer(document.getElementById('globe'), {
+          theme: 'light',
+          view: { lat: 38, lng: 28, altitude: 1.9 },
+          autoRotate: { enabled: false },
+        });
+        const layer = new RouteLayer(globe.globeGroup, { theme: 'light' });
+        globe.onFrame((time) => layer.update(time));
+        layer.onDrawn(() => {
+          window.__state.drawn += 1;
+        });
+        layer.setRoute(LHR, DXB, true);
+        window.__state.ready = true;
+        window.__globe = globe;
+        window.__layer = layer;
+      } catch (err) {
+        window.__state.error = String((err && err.message) || err);
+      }
+    </script>
+  </body>
+</html>
