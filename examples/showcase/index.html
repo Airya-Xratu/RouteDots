@@ -229,11 +229,16 @@
         color: #fca5a5;
       }
 
-      .badge {
+      .corner {
         position: absolute;
         right: 28px;
         bottom: 28px;
         z-index: 3;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .badge {
         font-size: 12px;
         color: var(--muted);
         background: rgba(255, 255, 255, 0.7);
@@ -241,6 +246,42 @@
         border: 1px solid #e5e7eb;
         padding: 7px 12px;
         border-radius: 999px;
+      }
+      .theme {
+        width: 32px;
+        height: 32px;
+        border-radius: 999px;
+        border: 1px solid #e5e7eb;
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(4px);
+        cursor: pointer;
+        font-size: 15px;
+        line-height: 1;
+        padding: 0;
+      }
+      .theme:hover {
+        border-color: #cfd3da;
+      }
+      .build-note {
+        position: absolute;
+        inset: 0;
+        z-index: 4;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 32px;
+        text-align: center;
+        font-size: 15px;
+        line-height: 1.6;
+        color: var(--ink);
+        background: #f7f8fa;
+      }
+      .build-note code {
+        background: #17181c;
+        color: #d7dae0;
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-size: 13px;
       }
 
       .features {
@@ -383,10 +424,21 @@
         </div>
 
         <button class="search" id="search" type="button">Search Flights</button>
-        <div class="hint" id="hint"></div>
+        <div class="hint" id="hint" role="status" aria-live="polite"></div>
       </div>
 
-      <div class="badge">Interactive demo · <span id="mode">…</span></div>
+      <div class="corner">
+        <div class="badge">Interactive demo · <span id="mode">…</span></div>
+        <button
+          class="theme"
+          id="theme"
+          type="button"
+          title="Switch light/dark theme"
+          aria-label="Switch light/dark theme"
+        >
+          🌙
+        </button>
+      </div>
     </section>
 
     <section class="features">
@@ -458,6 +510,18 @@
     <script src="../../dist/routedots.browser.global.js"></script>
     <script>
       (function () {
+        // Opened straight from a fresh clone? The IIFE bundle is built, not
+        // committed — say so instead of failing on a blank hero.
+        if (!window.RouteDots || !window.RouteDots.RouteDots) {
+          const note = document.createElement('div');
+          note.className = 'build-note';
+          note.innerHTML =
+            '<div><strong>RouteDots bundle not found.</strong><br>' +
+            'Run <code>npm run build</code>, then reload — this page loads<br>' +
+            '<code>dist/routedots.browser.global.js</code>.</div>';
+          document.body.appendChild(note);
+          return;
+        }
         const { RouteDots } = window.RouteDots;
 
         const fromSel = document.getElementById('from');
@@ -516,23 +580,52 @@
           hint.textContent = 'Pick two different cities.';
           hint.classList.add('error');
           setTimeout(() => {
-            hint.textContent = '';
             hint.classList.remove('error');
+            showSuccess();
           }, 2500);
         });
         window.__rd = rd; // for E2E
 
+        const tripLabel = (rt) => (rt ? 'round trip' : 'one way');
+        const departureLabel = () => {
+          const day = new Date(dateEl.value + 'T00:00:00');
+          return Number.isNaN(day.getTime())
+            ? ''
+            : new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(day);
+        };
+        const showSuccess = () => {
+          const route = rd.getRoute();
+          if (!route) return;
+          const parts = [`${route.from.name} → ${route.to.name}`, tripLabel(route.roundTrip)];
+          const when = departureLabel();
+          if (when) parts.push(when);
+          hint.textContent = parts.join(' · ');
+          hint.classList.remove('error');
+        };
+
         const apply = () => {
           const ok = rd.setRoute(fromSel.value, toSel.value, { roundTrip: trip === 'round' });
-          if (ok) {
-            hint.textContent = '';
-            hint.classList.remove('error');
-          }
+          if (ok) showSuccess();
         };
 
         fromSel.addEventListener('change', apply);
         toSel.addEventListener('change', apply);
         searchBtn.addEventListener('click', apply);
+        dateEl.addEventListener('change', () => {
+          if (rd.getRoute()) showSuccess();
+        });
+
+        const themeBtn = document.getElementById('theme');
+        let theme = 'light';
+        themeBtn.addEventListener('click', () => {
+          theme = theme === 'light' ? 'dark' : 'light';
+          rd.setTheme(theme);
+          themeBtn.textContent = theme === 'light' ? '🌙' : '☀️';
+          themeBtn.setAttribute(
+            'aria-label',
+            `Switch to ${theme === 'light' ? 'dark' : 'light'} theme`,
+          );
+        });
 
         oneWay.addEventListener('click', () => {
           trip = 'one';
@@ -553,8 +646,8 @@
           apply();
         });
 
-        // Default route after mount
-        rd.setRoute('LHR', 'DXB', { roundTrip: true });
+        // Default route after mount (selects are pre-selected to LHR/DXB)
+        apply();
       })();
     </script>
   </body>
