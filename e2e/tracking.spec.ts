@@ -48,17 +48,20 @@ test('the camera tracks the plane and yields to explicit views', async ({ page }
   const held = await getCamera(page);
   expect(Math.abs(held.lng - framed.lng)).toBeLessThan(0.3);
 
-  // Yank the camera far away with an explicit view: the tween wins first…
+  // Yank the camera far away with an explicit view: the tween wins *while it
+  // runs* — mid-tween the camera has moved most of the way toward the yank
+  // target (tracking never moves the camera away from the plane, so this
+  // proves the tween is in charge).
   const yankTo: ViewState = { lat: 20, lng: framed.lng - 80, altitude: 1.6 };
   await page.evaluate((v) => (window as unknown as Hooks).__rd!.setView(v, 700), yankTo);
-  await page.waitForTimeout(1_100);
-  const yanked = await getCamera(page);
-  expect(yanked.lng).toBeCloseTo(yankTo.lng, 0);
+  await page.waitForTimeout(300);
+  const during = await getCamera(page);
+  expect(during.lng).toBeLessThan(framed.lng - 40);
 
-  // …then tracking eases the camera back toward the plane.
-  await page.waitForTimeout(2_500);
+  // …and the moment it ends, tracking eases the camera back toward the plane.
+  await page.waitForTimeout(3_000);
   const tracked = await getCamera(page);
-  expect(tracked.lng).toBeGreaterThan(yanked.lng + 20);
+  expect(tracked.lng).toBeGreaterThan(during.lng + 20);
 
   // Clear the route: tracking disengages and idle rotation resumes.
   await page.evaluate(() => (window as unknown as Hooks).__rd!.clearRoute());
