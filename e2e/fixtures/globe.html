@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RouteDots E2E fixture — globe</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      #globe {
+        position: fixed;
+        inset: 0;
+        background: #eef1f5;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="globe"></div>
+    <script src="../../dist/routedots.browser.global.js"></script>
+    <script>
+      window.__state = { ready: false, error: null, webgl: null };
+      try {
+        const { GlobeRenderer, supportsWebGL } = window.RouteDots;
+        window.__state.webgl = supportsWebGL();
+        window.__globe = new GlobeRenderer(document.getElementById('globe'), {
+          theme: 'light',
+          view: { lat: 30, lng: 45, altitude: 1.9 },
+          autoRotate: { enabled: false },
+        });
+        window.__state.ready = true;
+      } catch (err) {
+        window.__state.error = String((err && err.message) || err);
+      }
+    </script>
+  </body>
+</html>

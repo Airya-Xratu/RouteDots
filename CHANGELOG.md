@@ -32,3 +32,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   type-declaration library build via tsup, convenience IIFE browser bundle with
   three.js inlined, Vitest unit-test setup, ESLint + Prettier, GitHub Actions CI
   (lint, typecheck, test, build, and Playwright E2E once present).
+- Globe renderer (`src/globe/`):
+  - `CameraRig` — pure, deterministic point-of-view state machine: lat/lng/altitude
+    clamping, shortest-way longitude tweening (`easeOutCubic`), auto-rotation.
+  - `createDotTexture` — equirectangular dot-map canvas texture (opaque ocean base
+    - dot lattice) with `projectDotToPx` projection helper.
+  - `createAtmosphere` — soft fresnel halo shader (BackSide sphere) that reads as a
+    subtle rim on light hero backgrounds.
+  - `GlobeRenderer` — three.js scene/camera/animation loop around the unit sphere:
+    theme colours (`GLOBE_THEMES` light/dark), `setView()` camera animation,
+    optional pointer drag + wheel zoom, `ResizeObserver`-driven resizing,
+    per-frame callbacks for route layers, `readPixel()` for tests, `dispose()`,
+    and a `supportsWebGL()` feature probe.
+  - Core + globe modules are now exported from the package root.
+- Playwright E2E setup with a WebGL smoke test: the dot globe renders in
+  headless Chromium (opaque globe surface, transparent background) and the
+  camera tween lands on the requested view.
