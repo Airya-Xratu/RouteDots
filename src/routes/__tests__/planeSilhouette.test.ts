@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildPlanePath, type PlaneSegment } from '../planeSilhouette.js';
 
-/** Collects the point cloud of a path (vertices of lines/quads/moves). */
+/** Collects the point cloud of a path (vertices of moves/lines/quads). */
 function points(segments: PlaneSegment[]): [number, number][] {
   const pts: [number, number][] = [];
   for (const seg of segments) {
@@ -14,12 +14,12 @@ function points(segments: PlaneSegment[]): [number, number][] {
 describe('buildPlanePath', () => {
   const path = buildPlanePath(1);
 
-  it('has the nose at the top (negative y) and the tail below', () => {
+  it('has the rounded nose at the top and the tail below', () => {
     const pts = points(path);
     const minY = Math.min(...pts.map((p) => p[1]));
     const maxY = Math.max(...pts.map((p) => p[1]));
-    expect(minY).toBe(-48);
-    expect(maxY).toBe(48);
+    expect(minY).toBe(-50); // nose
+    expect(maxY).toBe(49); // tail (control point of the rounded tip)
   });
 
   it('is symmetric about the vertical axis', () => {
@@ -30,6 +30,11 @@ describe('buildPlanePath', () => {
         true,
       );
     }
+  });
+
+  it('is curved: more than half the segments are quadratic', () => {
+    const quads = path.filter((seg) => seg.op === 'quad').length;
+    expect(quads / path.length).toBeGreaterThan(0.5);
   });
 
   it('scales linearly', () => {
