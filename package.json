@@ -1,0 +1,74 @@
+{
+  "name": "routedots",
+  "version": "0.1.0",
+  "description": "Interactive dot-globe flight route visualizer: curved great-circle arcs, outbound/return separation and animated planes, built on three.js.",
+  "keywords": [
+    "flight",
+    "airline",
+    "globe",
+    "route",
+    "three.js",
+    "map",
+    "visualization",
+    "hero",
+    "webgl"
+  ],
+  "license": "MIT",
+  "author": "Airya-Xratu",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Airya-Xratu/RouteDots.git"
+  },
+  "type": "module",
+  "main": "./dist/routedots.cjs",
+  "module": "./dist/routedots.js",
+  "types": "./dist/routedots.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/routedots.d.ts",
+      "import": "./dist/routedots.js",
+      "require": "./dist/routedots.cjs"
+    },
+    "./browser": {
+      "types": "./dist/routedots.d.ts",
+      "default": "./dist/routedots.browser.global.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup && tsup --config tsup.browser.config.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "clean": "rm -rf dist coverage .playwright"
+  },
+  "peerDependencies": {
+    "three": ">=0.150.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "@types/node": "^20.14.0",
+    "eslint": "^9.9.0",
+    "eslint-config-prettier": "^10.0.0",
+    "prettier": "^3.3.0",
+    "three": "^0.179.0",
+    "tsup": "^8.2.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.0.0"
+  }
+}
