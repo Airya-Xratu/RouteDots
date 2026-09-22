@@ -34,6 +34,7 @@ export * from './routes/GreatCircleCurve.js';
 export * from './routes/routeShader.js';
 export * from './routes/easing.js';
 export * from './routes/RouteLayer.js';
+export * from './routes/cameraTracking.js';
 export * from './routes/PlaneScheduler.js';
 export * from './routes/planeSilhouette.js';
 export * from './routes/PlaneLayer.js';

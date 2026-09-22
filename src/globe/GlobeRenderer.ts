@@ -176,6 +176,11 @@ export class GlobeRenderer {
     return this.ready;
   }
 
+  /** True while the user is actively dragging the globe (interaction wins over tracking). */
+  get isDragging(): boolean {
+    return this.pointerDown;
+  }
+
   /** Registers a per-frame callback; returns an unsubscribe function. */
   onFrame(callback: (time: number, dt: number) => void): () => void {
     this.frameCallbacks.add(callback);

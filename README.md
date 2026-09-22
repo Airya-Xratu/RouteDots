@@ -23,6 +23,9 @@ and a flat 2D fallback for browsers without WebGL.
   different lifts, so the "there and back" is readable at a glance.
 - ✈️ **A plane that flies your route.** A small airliner repeats the outbound
   arc on an interval, oriented along the track.
+- 🎥 **The globe follows the plane.** While a route is set, idle rotation
+  pauses and the camera eases back toward the plane whenever it leaves the
+  visible disc — manual drags and explicit `setView` calls always win.
 - 📍 **City-name pins at each end.** Both endpoints carry a labelled pin badge
   that sticks to the globe as it rotates, and fades out on the far side.
 - 🗺️ **Light country borders.** A subtle border layer decoded from the bundled

@@ -23,6 +23,7 @@ import {
 import type { ViewState } from './globe/cameraRig.js';
 import { RouteLayer, type RouteLayerOptions } from './routes/RouteLayer.js';
 import { PlaneLayer, type PlaneLayerOptions } from './routes/PlaneLayer.js';
+import { trackCamera } from './routes/cameraTracking.js';
 import { EndpointLabels } from './routes/EndpointLabels.js';
 import { FlatRouteMap, type FlatRouteMapOptions } from './flat/FlatRouteMap.js';
 import { angularDistance, DEG, greatCircleMidpoint } from './core/greatCircle.js';
@@ -159,6 +160,8 @@ export class RouteDots {
         { name: a.name, lat: a.lat, lng: a.lng },
         { name: b.name, lat: b.lat, lng: b.lng },
       ]);
+      // Camera tracking takes over while a route is set: idle rotation pauses.
+      this.globe.setAutoRotate(false);
       if (this.options.frameRoute !== false) this.frameRoute(a, b);
     } else if (this._mode === 'flat' && this.flat) {
       this.flat.setRoute(a, b, { roundTrip });
@@ -173,7 +176,24 @@ export class RouteDots {
     if (this._mode === 'webgl' && this.layer) this.layer.clear();
     this.plane?.clear();
     this.pins?.clear();
+    // Camera tracking disengages with the route; idle rotation resumes.
+    if (this._mode === 'webgl' && this.globe) {
+      this.globe.setAutoRotate(this.options.autoRotate?.enabled !== false);
+    }
     this.emit('route:cleared');
+  }
+
+  /** Current camera view (WebGL mode only; null in flat mode). */
+  getCameraState(): ViewState | null {
+    if (this._mode !== 'webgl') return null;
+    return this.globe?.getCameraState() ?? null;
+  }
+
+  /** Animates the camera to a new view (WebGL mode only; a no-op in flat mode). */
+  setView(view: ViewState, durationMs?: number): void {
+    if (this._mode === 'webgl' && this.globe) {
+      this.globe.setView(view, durationMs ?? 1200);
+    }
   }
 
   /** Switches the colour theme at runtime. */
@@ -305,11 +325,31 @@ export class RouteDots {
       o.theme,
     );
 
-    this.globe.onFrame((time) => {
+    this.globe.onFrame((time, dtSec) => {
       this.layer?.update(time);
       if (this.plane) this.plane.update(time, this.globe!.camera);
+      this.updateCameraTracking(dtSec);
       this.pins?.update();
     });
+  }
+
+  /**
+   * Camera tracking (WebGL): while a route is set and neither the user nor a
+   * view tween is in control, ease the camera back toward the plane whenever
+   * it leaves the visible disc. Pure policy lives in `cameraTracking.ts`.
+   */
+  private updateCameraTracking(dtSec: number): void {
+    if (!this.globe || !this.plane || !this.route) return;
+    const ground = this.plane.getGroundPosition();
+    if (!ground) return;
+    const step = trackCamera({
+      camera: this.globe.rig.state,
+      plane: ground,
+      dtSec,
+      routeActive: true,
+      userControlled: this.globe.isDragging || this.globe.rig.tweenActive,
+    });
+    if (step.adjusted) this.globe.rig.snapTo(step.camera);
   }
 
   private unmountWebGL(): void {
