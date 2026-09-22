@@ -6,6 +6,7 @@ type Hooks = {
     isReady: boolean;
     readPixel: (x: number, y: number) => [number, number, number, number];
   } | null;
+  __plane: { getProgress: () => number | null; sprite: { visible: boolean } } | null;
   __layer: {
     currentRoute: {
       origin: { lat: number; lng: number };
