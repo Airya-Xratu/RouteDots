@@ -56,8 +56,8 @@ jobs:
           if [ ! -f e2e-debug-output-pushed.marker ]; then
             git config user.name "ci-debug"
             git config user.email "ci-debug@users.noreply.github.com"
-            git add e2e-debug-output.md e2e-debug-output-pushed.marker
             touch e2e-debug-output-pushed.marker
+            git add e2e-debug-output.md e2e-debug-output-pushed.marker
             git commit -m "chore(ci): temporary e2e debug output"
             git push origin "HEAD:${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" || echo "DEBUG PUSH FAILED"
           fi
