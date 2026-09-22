@@ -10,11 +10,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# TEMP (debug): needed so the e2e debug step can push its output to the
-# branch. Remove together with the debug step.
-permissions:
-  contents: write
-
 jobs:
   quality:
     name: Lint · typecheck · test · build
@@ -45,51 +40,4 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - name: Run e2e (debug)
-        run: |
-          if npm run test:e2e > /tmp/e2e-full.txt 2>&1; then
-            echo OK > /tmp/e2e-status
-          else
-            echo FAIL > /tmp/e2e-status
-          fi
-      - name: Annotate e2e result (debug, never fails)
-        run: |
-          set +e
-          node -e '
-            const fs = require("fs");
-            const status = fs.existsSync("/tmp/e2e-status") ? fs.readFileSync("/tmp/e2e-status", "utf8").trim() : "UNKNOWN";
-            let out = "";
-            try { out = fs.readFileSync("/tmp/e2e-full.txt", "utf8"); } catch (e) { out = String(e); }
-            const picked = [];
-            for (const raw of out.split("\n")) {
-              const t = raw.trim();
-              if (!t) continue;
-              if (/✘|Error|error|expect\(|Received|Expected|Timeout|timeout|failed|passed|skipped/i.test(t)) picked.push(t);
-              if (picked.length >= 70) break;
-            }
-            let msg = picked.slice(-45).join("\\n");
-            msg = msg.replace(/[:%{}"#]/g, " ");
-            console.log(`::${status === "OK" ? "notice" : "error"} title=e2e[${status}]::${msg}`);
-          '
-          # Best effort: also push the full output to the branch for inspection.
-          {
-            echo "e2e status: $(cat /tmp/e2e-status 2>/dev/null)"
-            echo '```'
-            cat /tmp/e2e-full.txt 2>/dev/null
-            echo '```'
-          } > e2e-debug-output.md
-          if [ ! -f e2e-debug-output-pushed.marker ]; then
-            git config user.name "ci-debug"
-            git config user.email "ci-debug@users.noreply.github.com"
-            touch e2e-debug-output-pushed.marker
-            git add e2e-debug-output.md e2e-debug-output-pushed.marker
-            git commit -m "chore(ci): temporary e2e debug output"
-            git push origin "HEAD:${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
-          fi
-          exit 0
-      - name: Fail if e2e failed (debug)
-        run: |
-          if [ "$(cat /tmp/e2e-status)" != "OK" ]; then
-            echo "e2e tests failed — see the e2e[FAIL] annotation above"
-            exit 1
-          fi
+      - run: npm run test:e2e
