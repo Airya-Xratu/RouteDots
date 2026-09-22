@@ -14,7 +14,7 @@ export interface DotTextureOptions {
   bgColor?: string;
   /** Dot colour (default #8b93a1). */
   dotColor?: string;
-  /** Dot radius in degrees (default 0.45). */
+  /** Dot radius in degrees (default 0.62). */
   dotSizeDeg?: number;
 }
 
@@ -51,7 +51,7 @@ export function createDotTexture(
   const height = Math.round(width / 2);
   const bgColor = options.bgColor ?? '#ffffff';
   const dotColor = options.dotColor ?? '#8b93a1';
-  const dotSizeDeg = options.dotSizeDeg ?? 0.45;
+  const dotSizeDeg = options.dotSizeDeg ?? 0.62;
 
   const canvas = document.createElement('canvas');
   canvas.width = width;

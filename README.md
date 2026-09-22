@@ -25,6 +25,9 @@ and a flat 2D fallback for browsers without WebGL.
   arc on an interval, oriented along the track.
 - 📍 **City-name pins at each end.** Both endpoints carry a labelled pin badge
   that sticks to the globe as it rotates, and fades out on the far side.
+- 🗺️ **Light country borders.** A subtle border layer decoded from the bundled
+  110m country data — on the globe and in the flat fallback, restylable or
+  switch-off-able via the `borders` option.
 - 🪶 **One dependency, offline data.** Built on `three.js`; the 110m world
   land mask (Natural Earth, public domain) is bundled — no tiles, no API keys.
 - 🧯 **Graceful degradation.** Without WebGL you get the same dot map in 2D

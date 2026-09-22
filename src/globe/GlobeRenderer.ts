@@ -12,19 +12,22 @@ import { decodeRings, type TopoLand } from '../core/topojson.js';
 import { CameraRig, type ViewState } from './cameraRig.js';
 import { createDotTexture } from './dotTexture.js';
 import { createAtmosphere } from './atmosphere.js';
+import { BordersLayer } from './BordersLayer.js';
 
 export interface GlobeThemeColors {
   /** Base sphere colour (ocean). */
   globe: string;
   /** Dot colour (land). */
   dots: string;
+  /** Country border line colour. */
+  borders: string;
   /** Atmosphere halo colour. */
   atmosphere: string;
 }
 
 export const GLOBE_THEMES: Record<'light' | 'dark', GlobeThemeColors> = {
-  light: { globe: '#ffffff', dots: '#8b93a1', atmosphere: '#93a7c4' },
-  dark: { globe: '#10141c', dots: '#5b6b82', atmosphere: '#3d5f8f' },
+  light: { globe: '#ffffff', dots: '#8b93a1', borders: '#c4cbd6', atmosphere: '#93a7c4' },
+  dark: { globe: '#10141c', dots: '#5b6b82', borders: '#2e3c56', atmosphere: '#3d5f8f' },
 };
 
 export interface GlobeRendererOptions {
@@ -52,6 +55,14 @@ export interface GlobeRendererOptions {
   interactive?: boolean;
   /** Replace the bundled land mask. */
   land?: TopoLand;
+  /** Country border lines (default enabled). */
+  borders?: {
+    enabled?: boolean;
+    /** Line colour (default: the theme's border colour). */
+    color?: string;
+    /** Line opacity, 0..1 (default 0.55). */
+    opacity?: number;
+  };
 }
 
 /** True when the current environment can create a WebGL context. */
@@ -71,6 +82,8 @@ export class GlobeRenderer {
   /** Everything attached here rotates/positions with the globe. */
   readonly globeGroup: THREE.Group;
   readonly rig: CameraRig;
+  /** Country border lines (null when borders are disabled). */
+  readonly borders: BordersLayer | null;
 
   private readonly container: HTMLElement;
   private readonly globeMesh: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
@@ -130,6 +143,14 @@ export class GlobeRenderer {
 
     this.atmosphere = createAtmosphere({ color: themeColors.atmosphere });
     this.scene.add(this.atmosphere);
+
+    this.borders =
+      options.borders?.enabled === false
+        ? null
+        : new BordersLayer(this.globeGroup, {
+            color: options.borders?.color ?? themeColors.borders,
+            opacity: options.borders?.opacity,
+          });
 
     this.rig = new CameraRig({
       initial: view,
@@ -200,6 +221,7 @@ export class GlobeRenderer {
     cancelAnimationFrame(this.rafId);
     this.resizeObserver?.disconnect();
     this.frameCallbacks.clear();
+    this.borders?.dispose();
     this.globeMesh.geometry.dispose();
     this.globeMesh.material.dispose();
     (this.atmosphere.material as THREE.Material).dispose();

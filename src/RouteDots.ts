@@ -57,6 +57,19 @@ export interface RouteDotsOptions {
   flat?: FlatRouteMapOptions;
   /** Replace the bundled land mask. */
   land?: TopoLand;
+  /**
+   * Country border lines (default enabled).
+   * `color` applies to both modes; `opacity` is the globe line opacity,
+   * `width` the flat-map stroke width in px.
+   */
+  borders?: {
+    enabled?: boolean;
+    color?: string;
+    /** Globe line opacity, 0..1 (default 0.55). */
+    opacity?: number;
+    /** Flat stroke width in px (default 1). */
+    width?: number;
+  };
 }
 
 export interface RouteDotsRouteOptions {
@@ -237,6 +250,14 @@ export class RouteDots {
       interactive: o.interactive,
       texture: o.texture,
       land: o.land,
+      borders:
+        o.borders === undefined
+          ? undefined
+          : {
+              enabled: o.borders.enabled,
+              color: o.borders.color,
+              opacity: o.borders.opacity,
+            },
     };
     try {
       this.globe = new GlobeRenderer(this.container, globeOptions);
@@ -311,6 +332,14 @@ export class RouteDots {
       flightMs: o.flat?.flightMs ?? o.plane?.flightMs,
       pauseMs: o.flat?.pauseMs ?? o.plane?.pauseMs,
       land: o.land,
+      borders:
+        o.borders === undefined
+          ? undefined
+          : {
+              enabled: o.borders.enabled,
+              color: o.borders.color,
+              width: o.borders.width,
+            },
     };
     this.flat = new FlatRouteMap(this.container, flatOptions);
     this._mode = 'flat';

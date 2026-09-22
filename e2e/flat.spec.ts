@@ -31,17 +31,32 @@ test('flat fallback draws both routes and flies the plane', async ({ page }) => 
   expect(counts.markers).toBe(2);
   expect(counts.dashed).toBe(true);
 
+  // Country borders render as hairline SVG polylines beneath the routes.
+  const borders = await page.evaluate(() => {
+    const polylines = Array.from(document.querySelectorAll('svg polyline'));
+    return {
+      count: polylines.length,
+      width: polylines[0]?.getAttribute('stroke-width'),
+      filled: polylines.some((p) => p.getAttribute('fill') !== 'none'),
+    };
+  });
+  expect(borders.count).toBeGreaterThan(500);
+  expect(borders.width).toBe('1');
+  expect(borders.filled).toBe(false);
+
   // Named endpoints render city-name labels.
   const labels = await page.evaluate(() =>
     Array.from(document.querySelectorAll('svg text')).map((t) => t.textContent),
   );
   expect(labels).toEqual(['London', 'Dubai']);
 
-  // The plane animates along the outbound path.
+  // The plane animates along the outbound path (plane group = last svg <g>).
   const readPlaneTransform = () =>
     page.evaluate(() => {
       const groups = document.querySelectorAll('svg g');
-      return groups.length >= 2 ? (groups[1] as SVGGElement).getAttribute('transform') : null;
+      return groups.length >= 2
+        ? (groups[groups.length - 1] as SVGGElement).getAttribute('transform')
+        : null;
     });
   const t1 = await readPlaneTransform();
   await page.waitForTimeout(700);

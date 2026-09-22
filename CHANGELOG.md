@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Country borders: a light border layer decoded from the bundled world-atlas
+  `countries-110m` data (Natural Earth, public domain), drawn under the routes.
+  - WebGL: a new `BordersLayer` lifts every shared TopoJSON arc to a sphere
+    hugging the surface — each border drawn exactly once in a single
+    `LineSegments` draw call (7,650 segments).
+  - Flat fallback: hairline SVG polylines beneath the routes, split at the
+    antimeridian so nothing is drawn across the map seam.
+  - New `borders` option: `{ enabled?, color?, opacity? (globe) / width? (flat) }`.
+- Sparser, chunkier dot lattice for a cleaner hero look: grid step 1.5° → 2°
+  (8,431 → 4,855 dots) with dot radius 0.45° → 0.62°, in both the WebGL
+  texture and the flat fallback.
+- `tools/generate-countries.mjs` regenerates the border data module.
 - Showcase: a light/dark theme switcher (bottom-right of the hero) wired to
   `RouteDots.setTheme`, so the demo exercises live theme switching.
 - Showcase: a friendly overlay (scoped to the hero) explains to run
