@@ -119,6 +119,16 @@ export class PlaneLayer {
     }
   }
 
+  /** Forgets the current arc; the plane hides until a new arc is set. */
+  clear(): void {
+    this.from = null;
+    this.to = null;
+    this.va = null;
+    this.vb = null;
+    this.lastProgress = null;
+    this.sprite.visible = false;
+  }
+
   dispose(): void {
     this.sprite.removeFromParent();
     const material = this.sprite.material as THREE.SpriteMaterial;
