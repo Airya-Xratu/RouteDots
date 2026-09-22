@@ -25,6 +25,7 @@ export * from './core/greatCircle.js';
 export * from './globe/cameraRig.js';
 export * from './globe/dotTexture.js';
 export * from './globe/atmosphere.js';
+export * from './globe/BordersLayer.js';
 export * from './globe/GlobeRenderer.js';
 
 // Route layer (three.js)
@@ -37,6 +38,7 @@ export * from './routes/planeSilhouette.js';
 export * from './routes/PlaneLayer.js';
 
 // No-WebGL flat fallback
+export * from './flat/borderPolylines.js';
 export * from './flat/FlatRouteMap.js';
 
 // Public API

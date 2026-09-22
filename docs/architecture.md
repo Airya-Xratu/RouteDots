@@ -53,11 +53,15 @@ src/
    shared/reversed arcs, ring closing).
 3. `rasterizeLand` fills a lat/lng grid with the classic even-odd parity
    scanline (edge crossings per row, fill between pairs — holes included).
-4. `buildDotGrid` samples a regular lattice (default 1.5° → 8,431 dots, ~40 ms)
+4. `buildDotGrid` samples a regular lattice (default 2° → 4,855 dots, ~40 ms)
    and keeps the land centres.
 5. `createDotTexture` paints the dots on an equirectangular canvas (opaque
    ocean base + dots) → `CanvasTexture`. The same lattice powers the flat
    fallback, so both modes look consistent.
+6. `decodeBorderArcs` turns the bundled `countries-110m` topology (shared
+   TopoJSON arcs) into country border polylines — each border exactly once —
+   lifted to a `LineSegments` sphere on the globe (`BordersLayer`) and drawn
+   as SVG polylines in the flat fallback (split at the antimeridian).
 
 ## Route geometry
 

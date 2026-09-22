@@ -66,3 +66,13 @@ describe('buildDotGrid — lattice regularity', () => {
     expect(() => buildDotGrid(polygons, { stepDeg: 45 })).toThrow(RangeError);
   });
 });
+
+describe('buildDotGrid — defaults', () => {
+  it('defaults to the sparser 2° lattice', () => {
+    const defaults = buildDotGrid(polygons);
+    expect(defaults.stepDeg).toBe(2);
+    expect(defaults.resDeg).toBe(0.5);
+    expect(defaults.dots.length).toBeGreaterThan(4000);
+    expect(defaults.dots.length).toBeLessThan(6000);
+  });
+});

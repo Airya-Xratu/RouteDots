@@ -23,6 +23,19 @@ export interface TopoGeometry {
   arcs?: number[][] | number[][][];
 }
 
+/** Optional per-feature metadata carried by world-atlas country geometries. */
+export interface TopoGeometryProperties {
+  /** Feature name, e.g. "Fiji". */
+  name?: string;
+}
+
+/** One country geometry in a world-atlas `countries-110m` topology. */
+export interface TopoCountryGeometry extends TopoGeometry {
+  /** ISO 3166-1 numeric code, e.g. "242". */
+  id?: string;
+  properties?: TopoGeometryProperties;
+}
+
 export interface TopoLand {
   type: 'Topology';
   arcs: number[][][];
@@ -33,6 +46,36 @@ export interface TopoLand {
       geometries: TopoGeometry[];
     };
   };
+}
+
+export interface TopoCountries {
+  type: 'Topology';
+  arcs: number[][][];
+  transform?: TopoTransform;
+  bbox?: [number, number, number, number];
+  objects: {
+    countries: {
+      type: string;
+      geometries: TopoCountryGeometry[];
+    };
+  };
+}
+
+/**
+ * Decodes a stored (possibly quantized, delta-encoded) arc into absolute
+ * [lng, lat] points.
+ */
+function decodeStoredArc(arc: number[][], transform?: TopoTransform): Ring {
+  if (!transform) return arc.map(([px, py]) => [px ?? 0, py ?? 0] as Point);
+  const [sx, sy] = transform.scale;
+  const [tx, ty] = transform.translate;
+  let x = 0;
+  let y = 0;
+  return arc.map(([dx, dy]) => {
+    x += dx ?? 0;
+    y += dy ?? 0;
+    return [x * sx + tx, y * sy + ty] as Point;
+  });
 }
 
 /**
@@ -48,20 +91,7 @@ export function decodeRings(topo: TopoLand): PolygonRings[] {
     if (stored) return stored;
 
     const arc = topo.arcs[Math.abs(index >= 0 ? index : ~index)] ?? [];
-    let x = 0;
-    let y = 0;
-    let ring: Ring;
-    if (topo.transform) {
-      const [sx, sy] = topo.transform.scale;
-      const [tx, ty] = topo.transform.translate;
-      ring = arc.map(([dx, dy]) => {
-        x += dx ?? 0;
-        y += dy ?? 0;
-        return [x * sx + tx, y * sy + ty] as Point;
-      });
-    } else {
-      ring = arc.map(([px, py]) => [px ?? 0, py ?? 0] as Point);
-    }
+    const ring = decodeStoredArc(arc, topo.transform);
 
     const resolved = index < 0 ? [...ring].reverse() : ring;
     cache.set(index, resolved);
@@ -107,4 +137,28 @@ export function countRingVertices(polygons: PolygonRings[]): number {
   let count = 0;
   for (const rings of polygons) for (const ring of rings) count += ring.length;
   return count;
+}
+
+/**
+ * Decodes every stored arc of a countries topology into absolute-coordinate
+ * polylines of [lng, lat].
+ *
+ * In a TopoJSON topology arcs are shared between the polygons on both sides
+ * of a border, so the decoded polylines are exactly the country border lines
+ * — each drawn once, with no duplicates. Degenerate arcs (fewer than two
+ * distinct points) are dropped.
+ */
+export function decodeBorderArcs(topo: TopoCountries): Ring[] {
+  const lines: Ring[] = [];
+  for (const arc of topo.arcs) {
+    const decoded = decodeStoredArc(arc, topo.transform);
+    const line: Ring = [];
+    for (const point of decoded) {
+      const last = line[line.length - 1];
+      if (last && last[0] === point[0] && last[1] === point[1]) continue;
+      line.push(point);
+    }
+    if (line.length > 1) lines.push(line);
+  }
+  return lines;
 }

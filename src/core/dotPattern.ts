@@ -7,7 +7,7 @@ import type { PolygonRings } from './topojson.js';
 import type { LatLon } from '../types.js';
 
 export interface DotPatternOptions {
-  /** Grid spacing between dots in degrees (default 1.5). */
+  /** Grid spacing between dots in degrees (default 2). */
   stepDeg?: number;
   /** Raster resolution used to test land (default: stepDeg / 4). */
   resDeg?: number;
@@ -29,7 +29,7 @@ export function buildDotGrid(
   polygons: PolygonRings[],
   options: DotPatternOptions = {},
 ): DotPattern {
-  const stepDeg = options.stepDeg ?? 1.5;
+  const stepDeg = options.stepDeg ?? 2;
   const resDeg = options.resDeg ?? Math.max(0.05, stepDeg / 4);
   if (stepDeg <= 0 || stepDeg > 20) {
     throw new RangeError(`stepDeg must be in (0, 20], got ${stepDeg}`);

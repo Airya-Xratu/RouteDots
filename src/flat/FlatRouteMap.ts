@@ -9,13 +9,16 @@
  * Everything is local DOM — no WebGL, no network.
  */
 import landTopo from '../data/land-110m.js';
+import countriesTopo from '../data/countries-110m.js';
 import { buildDotGrid } from '../core/dotPattern.js';
-import { decodeRings, type TopoLand } from '../core/topojson.js';
+import { decodeBorderArcs, decodeRings, type TopoLand } from '../core/topojson.js';
+import { flatBorderPoints } from './borderPolylines.js';
 import type { LatLon } from '../types.js';
 
 export interface FlatTheme {
   bg: string;
   dot: string;
+  border: string;
   outbound: string;
   return: string;
   marker: string;
@@ -26,6 +29,7 @@ export const FLAT_THEMES: Record<'light' | 'dark', FlatTheme> = {
   light: {
     bg: '#ffffff',
     dot: '#b6bcc6',
+    border: '#d4d9e0',
     outbound: '#23262e',
     return: '#8b93a1',
     marker: '#23262e',
@@ -34,6 +38,7 @@ export const FLAT_THEMES: Record<'light' | 'dark', FlatTheme> = {
   dark: {
     bg: '#10141c',
     dot: '#3a4557',
+    border: '#2e3c56',
     outbound: '#cfd8e6',
     return: '#5b6b82',
     marker: '#e2e8f0',
@@ -43,10 +48,18 @@ export const FLAT_THEMES: Record<'light' | 'dark', FlatTheme> = {
 
 export interface FlatRouteMapOptions {
   theme?: 'light' | 'dark';
-  /** Dot spacing in degrees (default 1.5). */
+  /** Dot spacing in degrees (default 2). */
   stepDeg?: number;
   /** Replace the bundled land mask. */
   land?: TopoLand;
+  /** Country border lines (default enabled). */
+  borders?: {
+    enabled?: boolean;
+    /** Line colour (default: the theme's border colour). */
+    color?: string;
+    /** Stroke width in px (default 1). */
+    width?: number;
+  };
   /** Map canvas width in CSS px (default 1600). */
   width?: number;
   /** Flight time / pause for the plane (ms). */
@@ -76,6 +89,7 @@ export class FlatRouteMap {
   private readonly stage: HTMLDivElement;
   private readonly canvas: HTMLCanvasElement;
   private readonly svg: SVGSVGElement;
+  private readonly borderGroup: SVGGElement;
   private readonly routeGroup: SVGGElement;
   private readonly planeEl: SVGGElement;
   private readonly theme: FlatTheme;
@@ -117,7 +131,7 @@ export class FlatRouteMap {
     this.canvas.style.width = '100%';
     this.canvas.style.height = '100%';
     this.stage.appendChild(this.canvas);
-    this.renderDots(options.stepDeg ?? 1.5, (options.land ?? landTopo) as TopoLand);
+    this.renderDots(options.stepDeg ?? 2, (options.land ?? landTopo) as TopoLand);
 
     const ns = 'http://www.w3.org/2000/svg';
     this.svg = document.createElementNS(ns, 'svg');
@@ -127,8 +141,11 @@ export class FlatRouteMap {
     this.svg.style.width = '100%';
     this.svg.style.height = '100%';
     this.svg.style.pointerEvents = 'none';
+    this.borderGroup = document.createElementNS(ns, 'g');
     this.routeGroup = document.createElementNS(ns, 'g');
     this.planeEl = document.createElementNS(ns, 'g');
+    this.svg.appendChild(this.borderGroup);
+    if (options.borders?.enabled !== false) this.renderBorders(options);
     this.svg.appendChild(this.routeGroup);
     this.svg.appendChild(this.planeEl);
     this.stage.appendChild(this.svg);
@@ -211,12 +228,29 @@ export class FlatRouteMap {
     if (!ctx) return;
     ctx.clearRect(0, 0, this.width, this.height);
     ctx.fillStyle = this.theme.dot;
-    const r = Math.max(1.2, (0.45 / 360) * this.width * 1.15);
+    const r = Math.max(1.2, (0.62 / 360) * this.width * 1.15);
     for (const dot of pattern.dots) {
       const [x, y] = this.project(dot);
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
+    }
+  }
+
+  /** Draws the country borders as SVG polylines under the route group. */
+  private renderBorders(options: FlatRouteMapOptions): void {
+    const rings = decodeBorderArcs(countriesTopo);
+    const points = flatBorderPoints(rings, this.width, this.height);
+    if (points.length === 0) return;
+    for (const pts of points) {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      el.setAttribute('points', pts);
+      el.setAttribute('fill', 'none');
+      el.setAttribute('stroke', options.borders?.color ?? this.theme.border);
+      el.setAttribute('stroke-width', String(options.borders?.width ?? 1));
+      el.setAttribute('stroke-linejoin', 'round');
+      el.setAttribute('stroke-linecap', 'round');
+      this.borderGroup.appendChild(el);
     }
   }
 
