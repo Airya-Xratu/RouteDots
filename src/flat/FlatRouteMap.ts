@@ -58,6 +58,11 @@ interface FlatRouteOptions {
   roundTrip?: boolean;
 }
 
+/** A route endpoint; `name` (when given) renders a text label. */
+export interface FlatRoutePoint extends LatLon {
+  name?: string;
+}
+
 // Rounded top-view airliner (nose up), ~20px tip-to-tail.
 const PLANE_PATH_D =
   'M0,-10 Q1.8,-6.8 1.4,-2.4 L1.4,3.2 Q1.4,6.8 0,8.4 Q-1.4,6.8 -1.4,3.2 L-1.4,-2.4 Q-1.8,-6.8 0,-10 Z ' +
@@ -133,7 +138,7 @@ export class FlatRouteMap {
   }
 
   /** (Re)draws the route. */
-  setRoute(origin: LatLon, dest: LatLon, options: FlatRouteOptions = {}): void {
+  setRoute(origin: FlatRoutePoint, dest: FlatRoutePoint, options: FlatRouteOptions = {}): void {
     this.routeStart = null;
     this.clearRoutes();
     const ns = 'http://www.w3.org/2000/svg';
@@ -181,6 +186,10 @@ export class FlatRouteMap {
       this.routeGroup.appendChild(marker);
     }
 
+    // City-name labels (only when the caller provides names).
+    if (origin.name) this.addLabel(x1, y1, origin.name);
+    if (dest.name) this.addLabel(x2, y2, dest.name);
+
     this.frameRoute(x1, y1, x2, y2, bulge);
     // restart the plane flight
     this.routeStart = performance.now();
@@ -225,6 +234,27 @@ export class FlatRouteMap {
     const tx = vw / 2 - ((minX + maxX) / 2) * scale;
     const ty = vh / 2 - ((minY + maxY) / 2) * scale;
     this.stage.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+  }
+
+  /** Adds a haloed city-name label near an endpoint marker. */
+  private addLabel(x: number, y: number, text: string): void {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    el.setAttribute('x', String(x + 12));
+    el.setAttribute('y', String(y - 12));
+    el.setAttribute(
+      'font-family',
+      "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+    );
+    el.setAttribute('font-size', '24');
+    el.setAttribute('font-weight', '600');
+    el.setAttribute('fill', this.theme.marker);
+    // Paint the stroke first so it acts as a halo around the glyphs.
+    el.setAttribute('stroke', this.theme.bg);
+    el.setAttribute('stroke-width', '6');
+    el.setAttribute('stroke-linejoin', 'round');
+    el.setAttribute('paint-order', 'stroke');
+    el.textContent = text;
+    this.routeGroup.appendChild(el);
   }
 
   private buildPlane(): void {
