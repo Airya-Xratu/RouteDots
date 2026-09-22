@@ -32,3 +32,9 @@ export * from './routes/RouteModel.js';
 export * from './routes/GreatCircleCurve.js';
 export * from './routes/routeShader.js';
 export * from './routes/RouteLayer.js';
+export * from './routes/PlaneScheduler.js';
+export * from './routes/planeSilhouette.js';
+export * from './routes/PlaneLayer.js';
+
+// No-WebGL flat fallback
+export * from './flat/FlatRouteMap.js';

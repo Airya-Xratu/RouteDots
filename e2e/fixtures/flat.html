@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RouteDots E2E fixture — flat fallback</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      #map {
+        position: relative;
+        height: 100vh;
+        background: #ffffff;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script src="../../dist/routedots.browser.global.js"></script>
+    <script>
+      window.__state = { ready: false, error: null };
+      try {
+        const { FlatRouteMap } = window.RouteDots;
+        const LHR = { lat: 51.507, lng: -0.128 };
+        const DXB = { lat: 25.204, lng: 55.271 };
+        const flat = new FlatRouteMap(document.getElementById('map'), { theme: 'light' });
+        flat.setRoute(LHR, DXB, { roundTrip: true });
+        window.__state.ready = true;
+        window.__flat = flat;
+      } catch (err) {
+        window.__state.error = String((err && err.message) || err);
+      }
+    </script>
+  </body>
+</html>

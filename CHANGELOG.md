@@ -63,3 +63,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ROUTE_THEMES` (light/dark arc + marker colours); route modules exported
     from the package root.
 - E2E: round-trip route renders in WebGL and reports `drawn`.
+- Plane animation (`src/routes/`):
+  - `PlaneScheduler` — pure, clock-free timing: fly `flightMs`, pause
+    `pauseMs`, repeat (delay, reset, degenerate-option handling).
+  - `planeSilhouette` — pure, symmetric top-view airliner path data plus
+    `drawPlane` canvas renderer.
+  - `PlaneLayer` — sprite that repeatedly flies the outbound arc (same lifted
+    great circle + clearance), oriented along its ground track in camera
+    space, hidden during the pause phase.
+- No-WebGL fallback (`src/flat/FlatRouteMap`): a flat equirectangular dot map
+  (same dot lattice as the 3D globe) with an SVG overlay — two curved dashed
+  routes (outbound up, return down), endpoint markers, a plane flying the
+  outbound path, and a smooth pan/zoom that frames the route. Works in any
+  DOM (no WebGL, no network).
+- E2E: plane flight progress is monotonic in WebGL; the flat fallback draws
+  both routes and animates the plane. Plane + flat modules exported from the
+  package root.
