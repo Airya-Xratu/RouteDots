@@ -107,5 +107,6 @@ test('showcase without the built bundle explains what to do', async ({ page }) =
   const note = page.locator('.build-note');
   await expect(note).toBeVisible();
   await expect(note).toContainText('npm run build');
-  await expect(page.evaluate(() => (window as unknown as { __rd?: unknown }).__rd)).toBeFalsy();
+  const rdInstance = await page.evaluate(() => (window as unknown as { __rd?: unknown }).__rd);
+  expect(rdInstance).toBeFalsy();
 });
