@@ -40,9 +40,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
-      - name: 'Run e2e (debug: report tail to PR comment)'
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: 'Run e2e (debug: commit output to branch)'
         run: |
           set -e
           npm run test:e2e > /tmp/e2e-full.txt 2>&1 || CODE=$?
@@ -50,13 +48,17 @@ jobs:
           {
             echo "e2e exit code: ${CODE}"
             echo '```'
-            tail -100 /tmp/e2e-full.txt
+            cat /tmp/e2e-full.txt
             echo '```'
-          } > /tmp/pr-note.md
-          node -e "require('fs').writeFileSync('/tmp/pr-note.json', JSON.stringify({ body: require('fs').readFileSync('/tmp/pr-note.md', 'utf8') }))"
-          HEAD_REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
-          PR=$(curl -s -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls?head=${GITHUB_REPOSITORY}:${HEAD_REF}&state=open" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const j=JSON.parse(s);process.stdout.write(j[0]?String(j[0].number):'')}catch(e){}})")
-          PR="${PR:-12}"
-          echo "posting comment to PR ${PR}"
-          curl -sS -X POST -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --data @/tmp/pr-note.json > /tmp/pr-post.json || echo "COMMENT POST FAILED"
+          } > e2e-debug-output.md
+          # Push the debug file to the branch only if it is not there yet,
+          # so follow-up CI runs do not loop.
+          if [ ! -f e2e-debug-output-pushed.marker ]; then
+            git config user.name "ci-debug"
+            git config user.email "ci-debug@users.noreply.github.com"
+            git add e2e-debug-output.md e2e-debug-output-pushed.marker
+            touch e2e-debug-output-pushed.marker
+            git commit -m "chore(ci): temporary e2e debug output"
+            git push origin "HEAD:${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" || echo "DEBUG PUSH FAILED"
+          fi
           exit "${CODE}"
