@@ -44,16 +44,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set +e
-          npm run test:e2e > /tmp/e2e-full.txt 2>&1
-          CODE=$?
           set -e
-          PR=$(gh pr view --json number -q .number || echo 12)
+          npm run test:e2e > /tmp/e2e-full.txt 2>&1 || CODE=$?
+          CODE=${CODE:-0}
           {
             echo "e2e exit code: ${CODE}"
             echo '```'
-            tail -80 /tmp/e2e-full.txt
+            tail -100 /tmp/e2e-full.txt
             echo '```'
           } > /tmp/pr-note.md
-          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" -f body="$(cat /tmp/pr-note.md)"
-          exit $CODE
+          node -e "require('fs').writeFileSync('/tmp/pr-note.json', JSON.stringify({ body: require('fs').readFileSync('/tmp/pr-note.md', 'utf8') }))"
+          HEAD_REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          PR=$(curl -s -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls?head=${GITHUB_REPOSITORY}:${HEAD_REF}&state=open" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const j=JSON.parse(s);process.stdout.write(j[0]?String(j[0].number):'')}catch(e){}})")
+          PR="${PR:-12}"
+          echo "posting comment to PR ${PR}"
+          curl -sS -X POST -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --data @/tmp/pr-note.json > /tmp/pr-post.json || echo "COMMENT POST FAILED"
+          exit "${CODE}"
