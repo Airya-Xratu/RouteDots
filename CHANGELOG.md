@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- CI: `ci.yml` was rejected by GitHub at dispatch time — the e2e job used
+  `hashFiles()` in a job-level `if`, which is only allowed on steps, so every
+  workflow run failed in 0 s without executing a single job (quality
+  included). Dropped the tautological guard; `playwright.config.ts` is
+  committed, so the e2e job always runs.
+
 ### Added
 
 - Showcase: a light/dark theme switcher (bottom-right corner) wired to
