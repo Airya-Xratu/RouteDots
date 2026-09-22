@@ -63,9 +63,11 @@ No bundler? Use the IIFE build (three.js included):
 `setRoute` accepts IATA codes (31 cities bundled via `RouteDots.CITIES`,
 case-insensitive), `City` objects, or bare `{ lat, lng }` points.
 
-**Try it:** open [`examples/showcase/index.html`](./examples/showcase/index.html)
-— a full hero with the search form driving the globe (run `npm run build`
-once first — the page loads the IIFE bundle from `dist/`).
+**Try it:** `npm run build && npm run dev`, then open
+[`http://localhost:5173`](http://localhost:5173) — a full airline hero where
+the search form (source/destination, swap, date, one-way/round trip,
+light/dark theme) drives the globe live. The same page also works from any
+static server once built: [`examples/showcase/index.html`](./examples/showcase/index.html).
 
 ## API in 30 seconds
 
@@ -87,6 +89,7 @@ git clone https://github.com/Airya-Xratu/RouteDots.git && cd RouteDots
 npm install
 
 npm run build       # ESM + CJS + dts + IIFE (three.js inlined)
+npm run dev         # build, then serve the showcase at http://localhost:5173
 npm test            # Vitest unit tests (pure core, rig, schedulers, model)
 npm run test:e2e    # Playwright: WebGL rendering, routes, plane, showcase
 npm run lint        # ESLint (flat)
