@@ -52,9 +52,26 @@ jobs:
           else
             echo FAIL > /tmp/e2e-status
           fi
-      - name: Push e2e output (debug, never fails)
+      - name: Annotate e2e result (debug, never fails)
         run: |
           set +e
+          node -e '
+            const fs = require("fs");
+            const status = fs.existsSync("/tmp/e2e-status") ? fs.readFileSync("/tmp/e2e-status", "utf8").trim() : "UNKNOWN";
+            let out = "";
+            try { out = fs.readFileSync("/tmp/e2e-full.txt", "utf8"); } catch (e) { out = String(e); }
+            const picked = [];
+            for (const raw of out.split("\n")) {
+              const t = raw.trim();
+              if (!t) continue;
+              if (/✘|Error|error|expect\(|Received|Expected|Timeout|timeout|failed|passed|skipped/i.test(t)) picked.push(t);
+              if (picked.length >= 70) break;
+            }
+            let msg = picked.slice(-45).join("\\n");
+            msg = msg.replace(/[:%{}"#]/g, " ");
+            console.log(`::${status === "OK" ? "notice" : "error"} title=e2e[${status}]::${msg}`);
+          '
+          # Best effort: also push the full output to the branch for inspection.
           {
             echo "e2e status: $(cat /tmp/e2e-status 2>/dev/null)"
             echo '```'
@@ -68,12 +85,11 @@ jobs:
             git add e2e-debug-output.md e2e-debug-output-pushed.marker
             git commit -m "chore(ci): temporary e2e debug output"
             git push origin "HEAD:${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
-            echo "push exit: $?"
           fi
           exit 0
       - name: Fail if e2e failed (debug)
         run: |
           if [ "$(cat /tmp/e2e-status)" != "OK" ]; then
-            echo "e2e tests failed — see e2e-debug-output.md on the branch"
+            echo "e2e tests failed — see the e2e[FAIL] annotation above"
             exit 1
           fi
