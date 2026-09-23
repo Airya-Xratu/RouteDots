@@ -11,6 +11,7 @@
  */
 import * as THREE from 'three';
 import { latLngToVec } from '../core/greatCircle.js';
+import { pinLabelCssVars, type ResolvedCityLabelStyle } from '../labels/textStyle.js';
 
 /** A labelled endpoint. */
 export interface PinPoint {
@@ -18,6 +19,11 @@ export interface PinPoint {
   name: string;
   lat: number;
   lng: number;
+  /**
+   * Colour of this pin's surface dot — the resolved airport colour of the
+   * endpoint (source / destination), when the `airports` option customizes it.
+   */
+  dotColor?: string;
 }
 
 /** Result of projecting one pin for the current camera. */
@@ -81,16 +87,20 @@ const PIN_CSS = `
   transform: translate(-50%, -100%);
   padding: 3px 9px 4px;
   border-radius: 999px;
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, sans-serif;
-  font-size: 12px;
-  font-weight: 600;
+  font-family: var(--rd-pin-font, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif);
+  font-size: var(--rd-pin-size, 12px);
+  font-weight: var(--rd-pin-weight, 600);
+  letter-spacing: var(--rd-pin-spacing, 0.01em);
   line-height: 1.35;
-  letter-spacing: 0.01em;
   white-space: nowrap;
   color: var(--rd-pin-fg);
   background: var(--rd-pin-bg);
-  box-shadow: 0 1px 6px rgba(10, 18, 32, 0.22);
+  box-shadow: var(--rd-pin-shadow, 0 1px 6px rgba(10, 18, 32, 0.22));
+}
+/* labels.background: false — bare text, no pill and no shadow. */
+.rd-pin-plain {
+  --rd-pin-shadow: none;
 }
 .rd-pin-light {
   --rd-pin-bg: #ffffff;
@@ -170,6 +180,7 @@ export class EndpointLabels {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly viewport: () => [number, number];
   private pins: Pin[] = [];
+  private textStyleValue: ResolvedCityLabelStyle | null = null;
 
   constructor(
     host: HTMLElement,
@@ -188,6 +199,21 @@ export class EndpointLabels {
     host.appendChild(this.layer);
     injectStyles();
     if (palette) this.setPalette(palette);
+  }
+
+  /** The resolved label text style in use (null until `setTextStyle`). */
+  get labelStyle(): ResolvedCityLabelStyle | null {
+    return this.textStyleValue;
+  }
+
+  /** Applies the city-name text style (font, size, weight, colours…). */
+  setTextStyle(style: ResolvedCityLabelStyle): void {
+    this.textStyleValue = style;
+    for (const [name, value] of Object.entries(pinLabelCssVars(style))) {
+      this.layer.style.setProperty(name, value);
+    }
+    // No pill background: bare text without the drop shadow.
+    this.layer.classList.toggle('rd-pin-plain', style.background === null);
   }
 
   /** Restyles the badges from the palette (theme switch / `setColors`). */
@@ -217,6 +243,9 @@ export class EndpointLabels {
       const dot = document.createElement('span');
       dot.className = 'rd-pin-dot';
       el.append(label, stem, dot);
+      // A customized endpoint (airports.source / airports.destination) colours
+      // its own pin dot; the layer default applies otherwise.
+      if (p.dotColor) el.style.setProperty('--rd-pin-dot', p.dotColor);
       this.layer.appendChild(el);
       this.pins.push({ el, v: new THREE.Vector3(...latLngToVec(p.lat, p.lng, 1)) });
     }

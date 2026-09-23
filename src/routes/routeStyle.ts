@@ -136,6 +136,44 @@ export const DEFAULT_RETURN_DASH = {
 /** Flat-world stroke widths (px) — outbound slightly heavier than the return. */
 export const DEFAULT_STROKE_WIDTH = { outbound: 1.8, return: 1.4 } as const;
 
+/**
+ * Widths up to this value are the legacy tube radius in globe radii; anything
+ * larger is read as **px** and converted by {@link globeTubeRadius}. (The
+ * default radius is 0.0015 — a 0.05-radius tube would already be a tenth of
+ * the planet, so no sane globe-unit width crosses this line.)
+ */
+export const GLOBE_WIDTH_LEGACY_MAX = 0.05;
+
+/**
+ * On-screen globe radius in px at the default camera framing (altitude 1.9,
+ * 42° fov, ~800 px-tall canvas) — the reference for px → globe-radius
+ * conversion, chosen so `width: 1.8` renders ~1.8 px wide, matching the
+ * flat world's 1.8 px stroke.
+ */
+export const GLOBE_RADIUS_PX_AT_DEFAULT_VIEW = 1300;
+
+/**
+ * Upper bound for a px width (anything wider is surely a unit mix-up, and a
+ * tube that big swallows the globe).
+ */
+export const MAX_LINE_WIDTH_PX = 64;
+
+/**
+ * Converts a resolved path width into the globe's tube radius.
+ *
+ * The flat world measures line thickness in px, and the docs / studio author
+ * `width` and `dash.width` as px — but the globe needs a tube radius in globe
+ * radii. Feeding a px value straight into `TubeGeometry` built a tube *larger
+ * than the planet* (the camera ends up inside it and the line disappears —
+ * "the 3D lines don't show"). Small legacy values keep their globe-radius
+ * meaning; px-range values are converted so one number styles both worlds.
+ */
+export function globeTubeRadius(width: number): number {
+  if (!Number.isFinite(width) || width <= GLOBE_WIDTH_LEGACY_MAX) return width;
+  const px = Math.min(width, MAX_LINE_WIDTH_PX);
+  return px / GLOBE_RADIUS_PX_AT_DEFAULT_VIEW;
+}
+
 /** Smallest dash / gap allowed, as a fraction of the route. */
 const MIN_DASH_PART = 0.0015;
 /** Largest dash / gap allowed. */

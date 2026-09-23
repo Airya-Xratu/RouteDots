@@ -42,6 +42,19 @@ import {
 import { PlaneIcon, type PlaneIconSource } from '../routes/PlaneIcon.js';
 import type { ResolvedPathStyle, RouteStyleOptions } from '../routes/routeStyle.js';
 import { dashArrayPx, resolveRouteStyle, type ResolvedRouteStyle } from '../routes/routeStyle.js';
+import {
+  resolveCityLabelStyle,
+  svgLabelAttrs,
+  type CityLabelTextStyle,
+  type ResolvedCityLabelStyle,
+} from '../labels/textStyle.js';
+import {
+  resolveAirportsStyle,
+  AIRPORT_DOT_RADIUS_FLAT,
+  type AirportsStyleOptions,
+  type ResolvedAirportEndpoint,
+  type ResolvedAirportsStyle,
+} from '../routes/airportStyle.js';
 import { CITIES } from '../cities.js';
 import { blinkPhase } from '../markers/blinkPattern.js';
 import {
@@ -108,6 +121,10 @@ export interface FlatRouteMapOptions {
   colors?: RouteDotsColors;
   /** Route styling; the same shape as the globe's `route` option. */
   route?: RouteStyleOptions;
+  /** City-name label text style (font, size, weight, colours, halo). */
+  labels?: CityLabelTextStyle;
+  /** Source / destination airport styling (endpoint dot, pulse ring). */
+  airports?: AirportsStyleOptions;
   /** Blinking city dots + ripple rings (default enabled). */
   cities?: CityMarkersOptions & { list?: readonly City[] };
   /** The plane and its icon component. */
@@ -190,6 +207,8 @@ export class FlatRouteMap {
   private theme: FlatTheme;
   private routeStyle: ResolvedRouteStyle;
   private cityStyle: ResolvedCityMarkers;
+  private labelStyle: ResolvedCityLabelStyle;
+  private airportStyle: ResolvedAirportsStyle;
   private planeIcon: PlaneIcon;
   private camera: ResolvedFlatCamera3D;
   private view = { scale: 1, cx: 0, cy: 0 };
@@ -199,6 +218,8 @@ export class FlatRouteMap {
   private outboundPath: SVGPathElement | null = null;
   private planeStage: { x: number; y: number } | null = null;
   private lastGeometries: FlatArcGeometry[] = [];
+  private labelEls: SVGTextElement[] = [];
+  private markerEls: SVGCircleElement[] = [];
   private following = false;
   private lastFrameMs = 0;
   private pointerDown = false;
@@ -216,6 +237,12 @@ export class FlatRouteMap {
     this.theme = paletteToFlatTheme(this.palette);
     this.routeStyle = resolveRouteStyle(themeName, options.route, options.colors);
     this.cityStyle = resolveCityMarkers(options.cities ?? {}, this.palette.cities);
+    this.labelStyle = resolveCityLabelStyle(this.palette, options.labels);
+    this.airportStyle = resolveAirportsStyle(
+      this.palette,
+      options.airports,
+      AIRPORT_DOT_RADIUS_FLAT,
+    );
     this.planeIcon = PlaneIcon.from(options.plane?.icon);
     this.camera = resolveFlatCamera3D(options.camera3d);
 
@@ -315,6 +342,16 @@ export class FlatRouteMap {
     return this.cityStyle;
   }
 
+  /** The resolved city-name label text style. */
+  get activeLabelStyle(): ResolvedCityLabelStyle {
+    return this.labelStyle;
+  }
+
+  /** The resolved source / destination airport styles. */
+  get activeAirports(): ResolvedAirportsStyle {
+    return this.airportStyle;
+  }
+
   /** The resolved 3D camera settings. */
   get camera3d(): ResolvedFlatCamera3D {
     return { ...this.camera };
@@ -334,6 +371,8 @@ export class FlatRouteMap {
     this.outboundPath = null;
     this.planeStage = null;
     this.routeStart = null;
+    this.labelEls = [];
+    this.markerEls = [];
     this.planeGroup.style.display = 'none';
   }
 
@@ -346,6 +385,12 @@ export class FlatRouteMap {
     this.theme = paletteToFlatTheme(this.palette);
     this.routeStyle = resolveRouteStyle(themeName, this.options.route, this.options.colors);
     this.cityStyle = resolveCityMarkers(this.options.cities ?? {}, this.palette.cities);
+    this.labelStyle = resolveCityLabelStyle(this.palette, this.options.labels);
+    this.airportStyle = resolveAirportsStyle(
+      this.palette,
+      this.options.airports,
+      AIRPORT_DOT_RADIUS_FLAT,
+    );
     this.container.style.backgroundColor = this.theme.bg;
 
     if (
@@ -392,6 +437,10 @@ export class FlatRouteMap {
       options.theme !== undefined
     ) {
       this.renderRoutes();
+    } else {
+      // Restyle in place — no route rebuild, no re-framing.
+      if (options.labels !== undefined) this.renderRouteLabels();
+      if (options.airports !== undefined) this.renderEndpointMarkers();
     }
   }
 
@@ -526,6 +575,8 @@ export class FlatRouteMap {
     this.routeGroup.innerHTML = '';
     this.outboundPath = null;
     this.planeStage = null;
+    this.labelEls = [];
+    this.markerEls = [];
     const route = this.route;
     if (!route) return;
 
@@ -542,18 +593,10 @@ export class FlatRouteMap {
 
     const [x1, y1] = this.project(route.from);
     const [x2, y2] = this.project(route.to);
-    const endpoints: [number, number][] = [
-      [x1, y1],
-      [x2, y2],
-    ];
-    for (const [x, y] of endpoints) {
-      const marker = document.createElementNS(NS, 'circle');
-      marker.setAttribute('cx', String(roundPixel(x)));
-      marker.setAttribute('cy', String(roundPixel(y)));
-      marker.setAttribute('r', '5');
-      marker.setAttribute('fill', this.theme.marker);
-      this.routeGroup.appendChild(marker);
-    }
+    this.renderEndpointMarkers([
+      { x: x1, y: y1, style: this.airportStyle.source },
+      { x: x2, y: y2, style: this.airportStyle.destination },
+    ]);
 
     // City-name labels (only when the caller provides names).
     if (route.from.name) this.addLabel(x1, y1, route.from.name);
@@ -606,20 +649,55 @@ export class FlatRouteMap {
     const el = document.createElementNS(NS, 'text');
     el.setAttribute('x', String(roundPixel(x + 12)));
     el.setAttribute('y', String(roundPixel(y - 12)));
-    el.setAttribute(
-      'font-family',
-      "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-    );
-    el.setAttribute('font-size', '24');
-    el.setAttribute('font-weight', '600');
-    el.setAttribute('fill', this.theme.label ?? this.theme.marker);
-    // Paint the stroke first so it acts as a halo around the glyphs.
-    el.setAttribute('stroke', this.theme.bg);
-    el.setAttribute('stroke-width', '6');
-    el.setAttribute('stroke-linejoin', 'round');
-    el.setAttribute('paint-order', 'stroke');
+    this.applyLabelAttrs(el);
     el.textContent = text;
     this.routeGroup.appendChild(el);
+    this.labelEls.push(el);
+  }
+
+  /** Applies the resolved label text style to a label element. */
+  private applyLabelAttrs(el: SVGTextElement): void {
+    for (const [name, value] of Object.entries(svgLabelAttrs(this.labelStyle))) {
+      el.setAttribute(name, value);
+    }
+    // Paint the stroke first so it acts as a halo around the glyphs.
+    el.setAttribute('stroke-linejoin', 'round');
+  }
+
+  /** Re-styles the existing route labels in place (live `labels` updates). */
+  private renderRouteLabels(): void {
+    for (const el of this.labelEls) this.applyLabelAttrs(el);
+  }
+
+  /** (Re)draws the source / destination airport dots. */
+  private renderEndpointMarkers(
+    endpoints: { x: number; y: number; style: ResolvedAirportEndpoint }[] = [
+      ...this.markerPositions(),
+    ],
+  ): void {
+    for (const el of this.markerEls) el.remove();
+    this.markerEls = [];
+    for (const { x, y, style } of endpoints) {
+      const marker = document.createElementNS(NS, 'circle');
+      marker.setAttribute('cx', String(roundPixel(x)));
+      marker.setAttribute('cy', String(roundPixel(y)));
+      marker.setAttribute('r', String(roundPixel(style.size)));
+      marker.setAttribute('fill', style.color);
+      this.routeGroup.appendChild(marker);
+      this.markerEls.push(marker);
+    }
+  }
+
+  /** Positions + styles of the current route's endpoints (null mid-frame). */
+  private markerPositions(): { x: number; y: number; style: ResolvedAirportEndpoint }[] {
+    const route = this.route;
+    if (!route) return [];
+    const [x1, y1] = this.project(route.from);
+    const [x2, y2] = this.project(route.to);
+    return [
+      { x: x1, y: y1, style: this.airportStyle.source },
+      { x: x2, y: y2, style: this.airportStyle.destination },
+    ];
   }
 
   /** Builds the plane's icon element (path data, or a rasterized `<image>`). */

@@ -6,8 +6,12 @@ import {
   DEFAULT_OUTBOUND_DASH,
   DEFAULT_RETURN_DASH,
   DEFAULT_STROKE_WIDTH,
+  GLOBE_RADIUS_PX_AT_DEFAULT_VIEW,
+  GLOBE_WIDTH_LEGACY_MAX,
+  MAX_LINE_WIDTH_PX,
   dashArrayPx,
   dashUniforms,
+  globeTubeRadius,
   resolveRouteStyle,
 } from '../routeStyle.js';
 
@@ -166,5 +170,27 @@ describe('dashArrayPx', () => {
     const [length, gap] = dashArrayPx({ color: '#000', length: 0.001, gap: 0.001, speed: 0 }, 0);
     expect(length).toBeGreaterThanOrEqual(1);
     expect(gap).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('globeTubeRadius — px-aware tube sizing', () => {
+  it('keeps legacy globe-radii widths as they are', () => {
+    expect(globeTubeRadius(0.0015)).toBe(0.0015);
+    expect(globeTubeRadius(0)).toBe(0);
+    expect(globeTubeRadius(GLOBE_WIDTH_LEGACY_MAX)).toBe(GLOBE_WIDTH_LEGACY_MAX);
+  });
+
+  it('reads px-range values (docs / studio) and converts them', () => {
+    // The studio's default "1.8 px" must land at ~the historical look.
+    expect(globeTubeRadius(1.8)).toBeCloseTo(1.8 / GLOBE_RADIUS_PX_AT_DEFAULT_VIEW, 12);
+    expect(globeTubeRadius(6)).toBeCloseTo(6 / GLOBE_RADIUS_PX_AT_DEFAULT_VIEW, 12);
+    expect(globeTubeRadius(2.4)).toBeCloseTo(2.4 / GLOBE_RADIUS_PX_AT_DEFAULT_VIEW, 12);
+  });
+
+  it('never lets a px value build a planet-sized tube', () => {
+    expect(globeTubeRadius(1e6)).toBeCloseTo(
+      MAX_LINE_WIDTH_PX / GLOBE_RADIUS_PX_AT_DEFAULT_VIEW,
+      12,
+    );
   });
 });

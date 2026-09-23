@@ -33,6 +33,16 @@ import type { ResolvedRouteStyle, RouteStyleOptions } from './routes/routeStyle.
 import { FlatRouteMap, type FlatRouteMapOptions } from './flat/FlatRouteMap.js';
 import type { FlatCamera3DOptions, ResolvedFlatCamera3D } from './flat/camera3d.js';
 import type { CityMarkersOptions, ResolvedCityMarkers } from './markers/rippleStyle.js';
+import {
+  resolveCityLabelStyle,
+  type CityLabelTextStyle,
+  type ResolvedCityLabelStyle,
+} from './labels/textStyle.js';
+import {
+  resolveAirportsStyle,
+  type AirportsStyleOptions,
+  type ResolvedAirportsStyle,
+} from './routes/airportStyle.js';
 import { angularDistance, DEG, greatCircleMidpoint } from './core/greatCircle.js';
 import type { TopoLand } from './core/topojson.js';
 import { resolvePalette, type RouteDotsColors, type RouteDotsPalette } from './theme.js';
@@ -87,6 +97,18 @@ export interface RouteDotsOptions {
    * opacity and period. `list` replaces the bundled city dataset.
    */
   cities?: CityMarkersOptions & { list?: readonly City[] };
+  /**
+   * Text style of the **city-name labels** (the globe's pin badges and the
+   * flat map's city names): font family / size / weight, letter spacing,
+   * text and badge colours, flat-map halo.
+   */
+  labels?: CityLabelTextStyle;
+  /**
+   * **Source and destination airports**: the endpoint dots, their pulse
+   * rings and the pin dots — shared defaults plus per-endpoint
+   * `source` / `destination` overrides (colour, size, ring colour / on-off).
+   */
+  airports?: AirportsStyleOptions;
   /** 3D camera effect for the flat world (perspective, tilt, depth, orbit). */
   camera3d?: FlatCamera3DOptions;
   /** Camera pan/zoom when a route is set (default true). */
@@ -222,6 +244,20 @@ export class RouteDots {
     return null;
   }
 
+  /** The resolved city-name label text style in use (null before mount). */
+  getLabelStyle(): ResolvedCityLabelStyle | null {
+    if (this._mode === 'webgl') return this.pins?.labelStyle ?? null;
+    if (this._mode === 'flat') return this.flat?.activeLabelStyle ?? null;
+    return null;
+  }
+
+  /** The resolved source / destination airport styles in use (null before mount). */
+  getAirportStyle(): ResolvedAirportsStyle | null {
+    if (this._mode === 'webgl') return this.layer?.resolvedAirports ?? null;
+    if (this._mode === 'flat') return this.flat?.activeAirports ?? null;
+    return null;
+  }
+
   /** The resolved 3D-camera settings of the flat world (null in the 3D globe). */
   getCamera3D(): ResolvedFlatCamera3D | null {
     return this._mode === 'flat' ? (this.flat?.camera3d ?? null) : null;
@@ -277,9 +313,10 @@ export class RouteDots {
           performance.now(),
         );
       }
+      const airports = resolveAirportsStyle(this.palette, this.options.airports);
       this.pins?.setPoints([
-        { name: a.name, lat: a.lat, lng: a.lng },
-        { name: b.name, lat: b.lat, lng: b.lng },
+        { name: a.name, lat: a.lat, lng: a.lng, dotColor: airports.source.color },
+        { name: b.name, lat: b.lat, lng: b.lng, dotColor: airports.destination.color },
       ]);
       // Camera tracking takes over while a route is set: idle rotation pauses.
       this.globe.setAutoRotate(false);
@@ -452,7 +489,12 @@ export class RouteDots {
       this.globe.setColors(o.colors);
       this.globe.setInteractive(o.interactive === true);
       this.globe.setAutoRotate(o.autoRotate?.enabled !== false && this.route === null);
-      this.layer?.applyStyle({ ...o.route, theme: o.theme, colors: o.colors });
+      this.layer?.applyStyle({
+        ...o.route,
+        theme: o.theme,
+        colors: o.colors,
+        airports: o.airports,
+      });
       // The plane and the city markers can be switched on/off at runtime.
       if (o.plane?.enabled === false) {
         this.plane?.dispose();
@@ -469,6 +511,18 @@ export class RouteDots {
         startDelayMs: o.plane?.startDelayMs,
         icon: o.plane?.icon,
       });
+      // Keep the plane on the arc it should fly: a live restyle may have
+      // changed the curve (angle / lift), and a freshly-enabled plane needs
+      // its arc in the first place.
+      if (this.plane && this.route && this.layer) {
+        const outbound = this.layer.resolvedStyle.outbound;
+        this.plane.setArc(
+          this.route.from,
+          this.route.to,
+          { lift: outbound.lift, angle: outbound.angle },
+          performance.now(),
+        );
+      }
       if (o.cities?.enabled === false) {
         this.cityMarkers?.dispose();
         this.cityMarkers = null;
@@ -488,6 +542,7 @@ export class RouteDots {
         label: palette.label,
         dot: palette.marker,
       });
+      this.pins?.setTextStyle(resolveCityLabelStyle(palette, o.labels));
       return;
     }
 
@@ -503,6 +558,8 @@ export class RouteDots {
             ? undefined
             : { enabled: o.borders.enabled, color: o.borders.color, width: o.borders.width },
         route: o.route,
+        labels: o.labels,
+        airports: o.airports,
         cities:
           o.cities === undefined
             ? undefined
@@ -604,6 +661,7 @@ export class RouteDots {
       ...o.route,
       theme: o.theme,
       colors: o.colors,
+      airports: o.airports,
     };
     this.layer = new RouteLayer(this.globe.globeGroup, layerOptions);
     this.layer.onDrawn(() => this.emit('route:drawn', this.getRoute()));
@@ -634,6 +692,7 @@ export class RouteDots {
         dot: this.palette.marker,
       },
     );
+    this.pins.setTextStyle(resolveCityLabelStyle(this.palette, o.labels));
 
     if (o.cities?.enabled !== false) {
       this.cityMarkers = this.createCityMarkers();
@@ -689,6 +748,8 @@ export class RouteDots {
       stepDeg: o.flat?.stepDeg ?? o.texture?.stepDeg,
       width: o.flat?.width ?? 1600,
       route: o.route,
+      labels: o.labels,
+      airports: o.airports,
       plane: {
         ...o.flat?.plane,
         ...o.plane,

@@ -66,6 +66,8 @@ Or import the ESM build from a CDN:
 | `borders`     | `{ enabled?, color?, opacity?, width? }`     | on, white, 1 / 1 px    | Country border lines. `opacity` = globe, `width` = flat-map stroke (px).              |
 | `route`       | `RouteStyleOptions`                          | see below              | Per-leg colour, opacity, lift, **curve angle**, width and **dash pattern**.           |
 | `cities`      | `CityMarkersOptions`                         | see below              | City markers: colour, period, dot size/dim, **ripple** size/thickness/growth/opacity. |
+| `labels`      | `CityLabelTextStyle`                         | see below              | City-name **text style** — font, size, weight, spacing, colours, halo.                |
+| `airports`    | `AirportsStyleOptions`                       | see below              | **Source / destination** endpoint dots + pulse rings, per endpoint.                   |
 | `plane`       | `PlaneLayerOptions & { enabled? }`           | on                     | Animated plane — **icon component**, size, colour, timing (see below).                |
 | `camera3d`    | `FlatCamera3DOptions`                        | off                    | The flat world's **3D camera effect** (perspective, tilt, yaw, depth, orbit).         |
 | `frameRoute`  | `boolean`                                    | `true`                 | Pan/zoom the camera to frame each new route.                                          |
@@ -98,15 +100,15 @@ new RouteDots(el, {
 
 #### Route style (`route`)
 
-| Key                                    | Default                                 | Description                                                            |
-| -------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------- |
-| `color`, `opacity`                     | theme                                   | Shared defaults for both legs.                                         |
-| `lift`                                 | outbound 0.10 / return 0.20             | Bulge above the sphere (globe).                                        |
-| `angle`                                | `0`                                     | **Curve angle**, in degrees, ±85 — banks the arc off its great circle. |
-| `width`, `strokeWidth`                 | 0.0015 / 1.8 px, 1.4 px                 | Tube radius (globe) / stroke width (flat).                             |
-| `dash`                                 | 14 dashes · 55 % duty (out) — see below | `{ color?, length?, gap?, speed?, width?, enabled? }`.                 |
-| `outbound`, `return`                   | —                                       | Per-path overrides of any key above (plus their own `dash`).           |
-| `drawDurationMs`, `staggerMs`, `pulse` | 1100 / 350 / true                       | Draw-on timing and endpoint pulses.                                    |
+| Key                                    | Default                                 | Description                                                                                                                                                                                                |
+| -------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `color`, `opacity`                     | theme                                   | Shared defaults for both legs.                                                                                                                                                                             |
+| `lift`                                 | outbound 0.10 / return 0.20             | Bulge above the sphere (globe).                                                                                                                                                                            |
+| `angle`                                | `0`                                     | **Curve angle**, in degrees, ±85 — banks the arc off its great circle.                                                                                                                                     |
+| `width`, `strokeWidth`                 | 0.0015 / 1.8 px, 1.4 px                 | Line thickness. `≤ 0.05` = tube radius in globe radii (legacy); larger values = **px**, applied as a stroke on the flat map and converted to a tube radius on the globe, so one number styles both worlds. |
+| `dash`                                 | 14 dashes · 55 % duty (out) — see below | `{ color?, length?, gap?, speed?, width?, enabled? }`.                                                                                                                                                     |
+| `outbound`, `return`                   | —                                       | Per-path overrides of any key above (plus their own `dash`).                                                                                                                                               |
+| `drawDurationMs`, `staggerMs`, `pulse` | 1100 / 350 / true                       | Draw-on timing and endpoint pulses.                                                                                                                                                                        |
 
 `dash.length` and `dash.gap` are **fractions of the whole route** (outbound
 defaults: `1/14 · 0.55` and `1/14 · 0.45`; return: `1/18 · 0.45` and
@@ -139,6 +141,65 @@ new RouteDots(el, {
 `grow` is how far the ring expands over one cycle (as a multiple of its own
 radius) and `size`/`width` are outer radius / thickness in globe radii; the
 flat world scales the same numbers into px.
+
+#### City-name labels (`labels`)
+
+Text style of the city names at the route ends — the globe's pin badges and
+the flat map's haloed labels share one option:
+
+| Key             | Default                 | Description                                                        |
+| --------------- | ----------------------- | ------------------------------------------------------------------ |
+| `color`         | theme `label`           | Text colour.                                                       |
+| `background`    | theme `labelBackground` | Badge pill behind the text (globe); `false` removes pill + shadow. |
+| `fontFamily`    | system UI stack         | CSS `font-family` list.                                            |
+| `fontSize`      | `12`                    | Font size in px (the flat map scales it ×2 into its map space).    |
+| `fontWeight`    | `600`                   | CSS `font-weight`.                                                 |
+| `letterSpacing` | `0.01em`                | CSS `letter-spacing`.                                              |
+| `halo`          | theme `ocean`           | Flat-map halo behind the glyphs; `false` disables it.              |
+| `haloWidth`     | `6`                     | Flat-map halo width (map px).                                      |
+
+```ts
+new RouteDots(el, {
+  labels: {
+    fontFamily: "'SF Mono', ui-monospace, monospace",
+    fontSize: 14,
+    fontWeight: 500,
+    letterSpacing: '0.08em',
+    color: '#e2e8f0',
+    background: 'rgba(10, 18, 32, 0.72)',
+  },
+});
+// live: rd.setOptions({ labels: { fontSize: 18 } }); rd.getLabelStyle();
+```
+
+#### Airports (`airports`)
+
+The route endpoints — the **source** and the **destination** — are styled
+independently: shared defaults plus per-endpoint overrides.
+
+| Key           | Default        | Description                                       |
+| ------------- | -------------- | ------------------------------------------------- |
+| `color`       | theme `marker` | Endpoint dot colour (both).                       |
+| `size`        | `0.0075` / `5` | Dot radius — globe radii (globe) / map px (flat). |
+| `ringColor`   | theme `ring`   | One-shot pulse-ring colour when the route is set. |
+| `ring`        | `true`         | Pulse the endpoint at all.                        |
+| `source`      | —              | Overrides of any key above, for the origin only.  |
+| `destination` | —              | Overrides, for the destination only.              |
+
+The endpoint's city-name pin dot follows `color`, so the pin, the marker and
+the pulse all read as one airport.
+
+```ts
+new RouteDots(el, {
+  airports: {
+    color: '#e2e8f0',
+    source: { color: '#22c55e' }, // green: departure
+    destination: { color: '#f97316', size: 6 }, // orange, a touch bigger
+  },
+});
+// live: rd.setOptions({ airports: { destination: { ring: false } } });
+// rd.getAirportStyle(); // → { source: {…}, destination: {…} }
+```
 
 #### Plane (`plane`)
 

@@ -9,6 +9,18 @@ type RouteDotsApi = {
     return: { color: string; angle: number; lift: number; dash: { color: string } | null };
   } | null;
   getCityStyle: () => { ripple: { periodMs: number; grow: number; size: number } } | null;
+  getLabelStyle: () => {
+    color: string;
+    background: string | null;
+    fontFamily: string;
+    fontSize: number;
+    fontWeight: string;
+    letterSpacing: string;
+  } | null;
+  getAirportStyle: () => {
+    source: { color: string; size: number; ringColor: string; ring: boolean };
+    destination: { color: string; size: number; ringColor: string; ring: boolean };
+  } | null;
   getCamera3D: () => {
     enabled: boolean;
     tilt: number;
@@ -105,6 +117,60 @@ test('flat world: colours, dashes, curve angles, ripple, plane icon and 3D camer
   expect(dashes.outbound.period.endsWith('px')).toBe(true);
   expect(dashes.outbound.duration).toBe('500ms');
   expect(dashes.back.duration).toBe('1000ms');
+
+  // ── City labels: the configured text style, in the flat map's 2× space ───
+  const labelStyle = await page.evaluate(() => {
+    const label = document.querySelector('[data-rd-layer="routes"] text');
+    return {
+      fontFamily: label?.getAttribute('font-family') ?? '',
+      fontSize: label?.getAttribute('font-size'),
+      fontWeight: label?.getAttribute('font-weight'),
+      letterSpacing: label?.getAttribute('letter-spacing'),
+      fill: label?.getAttribute('fill'),
+      halo: label?.getAttribute('stroke'),
+      haloWidth: label?.getAttribute('stroke-width'),
+    };
+  });
+  expect(labelStyle.fontFamily).toContain('Courier New');
+  expect(labelStyle.fontSize).toBe('26'); // 13 px × the flat map's 2× space
+  expect(labelStyle.fontWeight).toBe('300');
+  expect(labelStyle.letterSpacing).toBe('0.08em');
+  expect(labelStyle.fill).toBe('#141b26'); // the light theme's label colour
+  expect(labelStyle.halo).toBe('#102030');
+  expect(labelStyle.haloWidth).toBe('3');
+
+  // ── Airports: one endpoint style per side ────────────────────────────────
+  const endpoints = await page.evaluate(() => {
+    const dots = document.querySelectorAll('[data-rd-layer="routes"] circle');
+    return {
+      dom: Array.from(dots).map((c) => ({
+        r: c.getAttribute('r'),
+        fill: c.getAttribute('fill'),
+      })),
+      resolved: (window as unknown as Hooks).__rd!.flat.getAirportStyle(),
+    };
+  });
+  expect(endpoints.dom).toEqual([
+    { r: '7', fill: '#00cc88' },
+    { r: '4', fill: '#ff0066' },
+  ]);
+  expect(endpoints.resolved?.source.color).toBe('#00cc88');
+  expect(endpoints.resolved?.destination.color).toBe('#ff0066');
+
+  // Live label restyle happens in place (no route rebuild → the dash class stays).
+  const labelLive = await page.evaluate(() => {
+    const flat = (window as unknown as Hooks).__rd!.flat;
+    const flowing =
+      document.querySelector('[data-rd-layer="routes"] path')?.getAttribute('class') ?? '';
+    flat.setOptions({ labels: { fontSize: 20 } });
+    const label = document.querySelector('[data-rd-layer="routes"] text');
+    return {
+      flowing,
+      fontSize: label?.getAttribute('font-size'),
+    };
+  });
+  expect(labelLive.flowing).toBe('rd-dash-flow');
+  expect(labelLive.fontSize).toBe('40'); // 20 px × 2
 
   // ── Curve angles: both legs are banked, and by the requested angles ──────
   const angles = await page.evaluate(() => {
@@ -273,6 +339,8 @@ test('3D globe: resolved styles report the customisation, and live updates apply
       outbound: style.outbound,
       back: style.return,
       cities: globe.getCityStyle(),
+      labels: globe.getLabelStyle(),
+      airports: globe.getAirportStyle(),
       markers: (() => {
         const layer = globe.getCityMarkers();
         return layer ? { count: layer.count, ripple: layer.resolvedStyle.ripple } : null;
@@ -291,6 +359,25 @@ test('3D globe: resolved styles report the customisation, and live updates apply
   expect(resolved.markers?.ripple.periodMs).toBe(900);
   expect((resolved.options.route as { outbound: { angle: number } }).outbound.angle).toBe(30);
 
+  // ── City-label text style + per-endpoint airports are readable ───────────
+  expect(resolved.labels).not.toBeNull();
+  expect(resolved.labels!.fontSize).toBe(15);
+  expect(resolved.labels!.fontWeight).toBe('800');
+  expect(resolved.labels!.letterSpacing).toBe('0.05em');
+  expect(resolved.labels!.color).toBe('#22cc88');
+  expect(resolved.labels!.background).toBeNull(); // background: false
+  expect(resolved.airports!.source.color).toBe('#00cc88');
+  expect(resolved.airports!.source.size).toBe(0.012);
+  expect(resolved.airports!.source.ring).toBe(true);
+  expect(resolved.airports!.destination.color).toBe('#ff0066');
+  expect(resolved.airports!.destination.ring).toBe(false);
+  // The source pin's dot wears the source airport colour.
+  const pinDot = await page.evaluate(() => {
+    const pin = document.querySelector('#globe .rd-pin') as HTMLElement;
+    return pin.style.getPropertyValue('--rd-pin-dot');
+  });
+  expect(pinDot).toBe('#00cc88');
+
   // ── setColors / setOptions restyle the live scene ────────────────────────
   const live = await page.evaluate(() => {
     const globe = (window as unknown as Hooks).__rd!.globe;
@@ -298,6 +385,8 @@ test('3D globe: resolved styles report the customisation, and live updates apply
     globe.setOptions({
       route: { outbound: { angle: 0 }, return: { angle: 0, lift: 0.2 } },
       cities: { ripple: { periodMs: 3000, opacity: 0.9, size: 0.02 } },
+      labels: { fontSize: 18, background: true },
+      airports: { destination: { color: '#ffffff' } },
       plane: { icon: 'arrow', size: 0.05 },
     });
     const style = globe.getRouteStyle()!;
@@ -305,6 +394,8 @@ test('3D globe: resolved styles report the customisation, and live updates apply
       outbound: style.outbound,
       back: style.return,
       cities: globe.getCityStyle()!,
+      labels: globe.getLabelStyle(),
+      airports: globe.getAirportStyle(),
       route: globe.getRoute(),
       mode: globe.mode,
     };
@@ -314,6 +405,8 @@ test('3D globe: resolved styles report the customisation, and live updates apply
   expect(live.back.lift).toBe(0.2);
   expect(live.cities.ripple.periodMs).toBe(3000);
   expect(live.cities.ripple.size).toBe(0.02);
+  expect(live.labels?.fontSize).toBe(18);
+  expect(live.airports?.destination.color).toBe('#ffffff');
   expect(live.route?.from.code).toBe('LHR');
   expect(live.mode).toBe('webgl');
 
