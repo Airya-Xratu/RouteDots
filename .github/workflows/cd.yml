@@ -1,0 +1,72 @@
+name: CD
+
+# Deploys the showcase to GitHub Pages on every merge into `develop`
+# (i.e. every push to `develop`), plus manual runs from the Actions tab.
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+# Never deploy from two runs at once; do not cancel an in-flight deploy.
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    name: Build showcase site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # The showcase loads `../../dist/routedots.browser.global.js`, so the
+      # artifact mirrors that layout: `/examples/showcase/` + `/dist/…`.
+      - name: Assemble Pages site
+        run: |
+          mkdir -p site/examples/showcase site/dist
+          cp examples/showcase/index.html site/examples/showcase/index.html
+          cp dist/routedots.browser.global.js site/dist/routedots.browser.global.js
+          cat > site/index.html <<'EOF'
+          <!doctype html>
+          <html lang="en">
+            <head>
+              <meta charset="utf-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1" />
+              <title>RouteDots</title>
+              <meta http-equiv="refresh" content="0; url=examples/showcase/" />
+              <link rel="canonical" href="examples/showcase/" />
+            </head>
+            <body>
+              <p><a href="examples/showcase/">Open the RouteDots showcase</a></p>
+            </body>
+          </html>
+          EOF
+          touch site/.nojekyll
+      # Fails if Pages is missing unless we ask to enable it (first run).
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
