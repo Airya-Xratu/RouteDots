@@ -203,6 +203,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Flat world: the plane's frame loop assumed `SVGPathElement.getTotalLength`
   exists (it does not in jsdom-style environments) and threw every frame; it
   now hides the plane instead.
+- Flat world: mounting into a full-bleed hero (`position: absolute; inset: 0`)
+  collapsed the container to zero height, because the map forced
+  `position: relative` onto its host — which turns `inset: 0` into offsets that
+  no longer stretch it. The map now only sets `position: relative` when the
+  host's computed position is `static`, so absolute/fixed/relative layouts are
+  left exactly as the developer wrote them (found by the showcase's orbit
+  drag E2E, which was landing on the page header because the map had no
+  height).
 
 ## [0.1.0] - 2026-09-22
 

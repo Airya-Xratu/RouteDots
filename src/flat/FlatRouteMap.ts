@@ -219,7 +219,11 @@ export class FlatRouteMap {
     this.planeIcon = PlaneIcon.from(options.plane?.icon);
     this.camera = resolveFlatCamera3D(options.camera3d);
 
-    container.style.position = 'relative';
+    // The map is absolutely positioned inside the host, so the host must be a
+    // containing block — but never take over a position the host already set:
+    // an `absolute; inset: 0` hero would collapse to zero height if it were
+    // switched to `relative` (which is exactly how a full-bleed hero mounts).
+    if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
     container.style.overflow = 'hidden';
     container.style.backgroundColor = this.theme.bg;
     container.style.perspectiveOrigin = '50% 50%';
