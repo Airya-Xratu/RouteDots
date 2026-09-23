@@ -48,6 +48,18 @@
             outbound: { angle: 25, dash: { length: 0.04, gap: 0.02, speed: 2, width: 2.5 } },
             return: { angle: -35, dash: { length: 0.02, gap: 0.01, speed: 1 } },
           },
+          labels: {
+            fontFamily: "'Courier New', monospace",
+            fontSize: 13,
+            fontWeight: 300,
+            letterSpacing: '0.08em',
+            halo: '#102030',
+            haloWidth: 3,
+          },
+          airports: {
+            source: { color: '#00cc88', size: 7 },
+            destination: { color: '#ff0066', size: 4 },
+          },
           cities: {
             periodMs: 1200,
             dot: { size: 0.008, dim: 0.2 },
@@ -72,6 +84,17 @@
           interactive: true,
           colors: { outbound: '#0ea5e9', plane: '#0ea5e9' },
           route: { outbound: { angle: 30 }, return: { angle: -30, lift: 0.45 } },
+          labels: {
+            fontSize: 15,
+            fontWeight: 800,
+            letterSpacing: '0.05em',
+            color: '#22cc88',
+            background: false,
+          },
+          airports: {
+            source: { color: '#00cc88', size: 0.012 },
+            destination: { color: '#ff0066', ring: false },
+          },
           cities: { ripple: { periodMs: 900, grow: 5 } },
           plane: { icon: { path: 'M0,-40 L18,26 L-18,26 Z', viewBox: 80 } },
         });

@@ -600,6 +600,8 @@
         <div id="studio-colors"></div>
         <div id="studio-plane"></div>
         <div id="studio-cities"></div>
+        <div id="studio-labels"></div>
+        <div id="studio-airports"></div>
         <div id="studio-dashes"></div>
         <div id="studio-angles"></div>
         <pre class="studio-code" id="studio-code"></pre>
@@ -862,6 +864,8 @@
             dot: { size: 0.006, dim: 0.45 },
             ripple: { size: 0.011, width: 0.0025, grow: 2.6, opacity: 0.55 },
           },
+          labels: { fontSize: 12, fontWeight: 600, letterSpacing: 1, pill: true },
+          airports: { size: 8, ring: true, sourceColor: '', destinationColor: '' },
           plane: { icon: 'airliner', size: 30 },
           camera3d: {
             enabled: false,
@@ -959,6 +963,20 @@
           input.addEventListener('change', () => spec.onChange(input.checked));
           return { input, paint };
         };
+        const colorRow = (host, id, label) => {
+          const wrap = document.createElement('label');
+          wrap.className = 'row wide';
+          wrap.setAttribute('for', id);
+          const caption = document.createElement('span');
+          caption.textContent = label;
+          const input = document.createElement('input');
+          input.type = 'color';
+          input.id = id;
+          input.value = '#000000';
+          wrap.append(caption, input);
+          host.appendChild(wrap);
+          return { input };
+        };
         const textField = (host, spec) => {
           const wrap = document.createElement('label');
           wrap.className = 'row wide';
@@ -1024,6 +1042,27 @@
         const applyPlane = () =>
           rd.setOptions({ plane: { icon: planeIcon(), size: planeSizeForWorld() } });
         const applyCamera = () => rd.setOptions({ camera3d: { ...studio.camera3d } });
+        const applyLabels = () => rd.setOptions({ labels: labelsSnippet() });
+        // Endpoint dots read px like the flat map; the globe gets globe radii.
+        const AIRPORT_PX_PER_UNIT = 1300;
+        const airportSizeForWorld = () =>
+          rd.mode === 'webgl'
+            ? round(studio.airports.size / AIRPORT_PX_PER_UNIT, 5)
+            : studio.airports.size;
+        const airportColor = (value) => (value.trim() ? value.trim() : undefined);
+        const airportsSnippet = () => ({
+          size: airportSizeForWorld(),
+          ring: studio.airports.ring,
+          source: { color: airportColor(studio.airports.sourceColor) },
+          destination: { color: airportColor(studio.airports.destinationColor) },
+        });
+        const labelsSnippet = () => ({
+          fontSize: studio.labels.fontSize,
+          fontWeight: studio.labels.fontWeight,
+          letterSpacing: `${(studio.labels.letterSpacing / 100).toFixed(2)}em`,
+          background: studio.labels.pill ? true : false,
+        });
+        const applyAirports = () => rd.setOptions({ airports: airportsSnippet() });
 
         // ── World + 3D camera ───────────────────────────────────────────────
         const worldBox = section('studio-world', 'World');
@@ -1311,6 +1350,106 @@
         });
         note(cityBox, 'Both worlds share one ripple: the globe shader and the flat keyframes.');
 
+        // ── City-name text style ────────────────────────────────────────────
+        const labelsBox = section('studio-labels', 'City labels');
+        const labelSize = slider(labelsBox, {
+          id: 'label-size',
+          label: 'Font size',
+          min: 8,
+          max: 28,
+          step: 1,
+          value: STUDIO_DEFAULTS.labels.fontSize,
+          format: (v) => `${v}px`,
+          onInput: (v) => {
+            studio.labels.fontSize = v;
+            schedule(applyLabels);
+          },
+        });
+        const labelWeight = selection(labelsBox, {
+          id: 'label-weight',
+          label: 'Font weight',
+          options: [
+            ['400', 'Regular (400)'],
+            ['500', 'Medium (500)'],
+            ['600', 'Semibold (600)'],
+            ['800', 'Extra-bold (800)'],
+          ],
+          value: '600',
+          onChange: (value) => {
+            studio.labels.fontWeight = Number(value);
+            schedule(applyLabels);
+          },
+        });
+        const labelSpacing = slider(labelsBox, {
+          id: 'label-spacing',
+          label: 'Letter spacing',
+          min: 0,
+          max: 30,
+          step: 1,
+          value: STUDIO_DEFAULTS.labels.letterSpacing,
+          format: (v) => `${(v / 100).toFixed(2)}em`,
+          onInput: (v) => {
+            studio.labels.letterSpacing = v;
+            schedule(applyLabels);
+          },
+        });
+        const labelPill = checkbox(labelsBox, {
+          id: 'label-pill',
+          label: 'Badge background (globe)',
+          checked: true,
+          onChange: (on) => {
+            studio.labels.pill = on;
+            schedule(applyLabels);
+          },
+        });
+        note(
+          labelsBox,
+          'Typesets the city names at both route ends — the globe pins and the flat labels.',
+        );
+
+        // ── Airports (route endpoints) ──────────────────────────────────────
+        const airportsBox = section('studio-airports', 'Airports');
+        const airportSize = slider(airportsBox, {
+          id: 'airport-size',
+          label: 'Dot size',
+          min: 3,
+          max: 20,
+          step: 1,
+          value: STUDIO_DEFAULTS.airports.size,
+          format: (v) => `${v}px`,
+          onInput: (v) => {
+            studio.airports.size = v;
+            schedule(applyAirports);
+          },
+        });
+        const airportSourceColor = colorRow(airportsBox, 'airport-source-color', 'Source dot');
+        const airportDestColor = colorRow(
+          airportsBox,
+          'airport-destination-color',
+          'Destination dot',
+        );
+        const airportRing = checkbox(airportsBox, {
+          id: 'airport-ring',
+          label: 'Pulse ring on route set',
+          checked: true,
+          onChange: (on) => {
+            studio.airports.ring = on;
+            schedule(applyAirports);
+          },
+        });
+        airportSourceColor.input.addEventListener('input', () => {
+          studio.airports.sourceColor = airportSourceColor.input.value;
+          schedule(applyAirports);
+        });
+        airportDestColor.input.addEventListener('input', () => {
+          studio.airports.destinationColor = airportDestColor.input.value;
+          schedule(applyAirports);
+        });
+        note(
+          airportsBox,
+          'The source and the destination can differ; leave a colour empty to follow the theme.',
+        );
+
         // ── Dashes ──────────────────────────────────────────────────────────
         const dashBox = section('studio-dashes', 'Route dashes');
         selection(dashBox, {
@@ -1457,6 +1596,8 @@
                 opacity: round(studio.cities.ripple.opacity, 2),
               },
             },
+            labels: labelsSnippet(),
+            airports: airportsSnippet(),
             plane: { icon: planeIcon(), size: planeSizeForWorld() },
             camera3d: {
               enabled: studio.camera3d.enabled,
@@ -1493,6 +1634,12 @@
           cityRingWidth.paint(studio.cities.ripple.width);
           cityGrow.paint(studio.cities.ripple.grow);
           cityOpacity.paint(studio.cities.ripple.opacity);
+          labelSize.paint(studio.labels.fontSize);
+          labelWeight.value = String(studio.labels.fontWeight);
+          labelSpacing.paint(studio.labels.letterSpacing);
+          labelPill.paint(studio.labels.pill);
+          airportSize.paint(studio.airports.size);
+          airportRing.paint(studio.airports.ring);
           angleOut.paint(studio.route.outbound.angle);
           angleBack.paint(studio.route.return.angle);
           loadDash();
@@ -1507,6 +1654,8 @@
           customIconPath = '';
           for (const key of Object.keys(paletteOverrides)) delete paletteOverrides[key];
           document.getElementById('dash-leg').value = 'both';
+          document.getElementById('airport-source-color').value = '#000000';
+          document.getElementById('airport-destination-color').value = '#000000';
           worldSelect.value = 'auto';
           paintAll();
           rd.resetColors();
@@ -1521,6 +1670,8 @@
               dot: { ...studio.cities.dot },
               ripple: { ...studio.cities.ripple },
             },
+            labels: labelsSnippet(),
+            airports: airportsSnippet(),
             plane: { icon: studio.plane.icon, size: planeSizeForWorld() },
             camera3d: { ...studio.camera3d },
           });

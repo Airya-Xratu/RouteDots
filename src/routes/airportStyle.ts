@@ -58,20 +58,23 @@ export const AIRPORT_DOT_RADIUS_GLOBE = 0.0075;
 export const AIRPORT_DOT_RADIUS_FLAT = 5;
 
 function resolveEndpoint(
-  shared: AirportEndpointOptions,
+  shared: AirportsStyleOptions,
   specific: AirportEndpointOptions | undefined,
   palette: RouteDotsPalette,
   defaultSize: number,
 ): ResolvedAirportEndpoint {
   const o: AirportEndpointOptions = specific ?? {};
+  // Empty strings (a cleared colour picker) fall through to the next source.
+  const str = (value: string | undefined): string | undefined =>
+    typeof value === 'string' && value ? value : undefined;
   return {
-    color: o.color ?? shared.color ?? palette.marker,
+    color: str(o.color) ?? str(shared.color) ?? palette.marker,
     size: Number.isFinite(o.size)
       ? (o.size as number)
       : Number.isFinite(shared.size)
         ? (shared.size as number)
         : defaultSize,
-    ringColor: o.ringColor ?? shared.ringColor ?? palette.ring,
+    ringColor: str(o.ringColor) ?? str(shared.ringColor) ?? palette.ring,
     ring: o.ring ?? shared.ring ?? true,
   };
 }
