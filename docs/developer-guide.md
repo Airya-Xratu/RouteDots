@@ -98,15 +98,15 @@ new RouteDots(el, {
 
 #### Route style (`route`)
 
-| Key                                    | Default                                 | Description                                                            |
-| -------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------- |
-| `color`, `opacity`                     | theme                                   | Shared defaults for both legs.                                         |
-| `lift`                                 | outbound 0.10 / return 0.20             | Bulge above the sphere (globe).                                        |
-| `angle`                                | `0`                                     | **Curve angle**, in degrees, ±85 — banks the arc off its great circle. |
-| `width`, `strokeWidth`                 | 0.0015 / 1.8 px, 1.4 px                 | Tube radius (globe) / stroke width (flat).                             |
-| `dash`                                 | 14 dashes · 55 % duty (out) — see below | `{ color?, length?, gap?, speed?, width?, enabled? }`.                 |
-| `outbound`, `return`                   | —                                       | Per-path overrides of any key above (plus their own `dash`).           |
-| `drawDurationMs`, `staggerMs`, `pulse` | 1100 / 350 / true                       | Draw-on timing and endpoint pulses.                                    |
+| Key                                    | Default                                 | Description                                                                                                                                                                                                |
+| -------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `color`, `opacity`                     | theme                                   | Shared defaults for both legs.                                                                                                                                                                             |
+| `lift`                                 | outbound 0.10 / return 0.20             | Bulge above the sphere (globe).                                                                                                                                                                            |
+| `angle`                                | `0`                                     | **Curve angle**, in degrees, ±85 — banks the arc off its great circle.                                                                                                                                     |
+| `width`, `strokeWidth`                 | 0.0015 / 1.8 px, 1.4 px                 | Line thickness. `≤ 0.05` = tube radius in globe radii (legacy); larger values = **px**, applied as a stroke on the flat map and converted to a tube radius on the globe, so one number styles both worlds. |
+| `dash`                                 | 14 dashes · 55 % duty (out) — see below | `{ color?, length?, gap?, speed?, width?, enabled? }`.                                                                                                                                                     |
+| `outbound`, `return`                   | —                                       | Per-path overrides of any key above (plus their own `dash`).                                                                                                                                               |
+| `drawDurationMs`, `staggerMs`, `pulse` | 1100 / 350 / true                       | Draw-on timing and endpoint pulses.                                                                                                                                                                        |
 
 `dash.length` and `dash.gap` are **fractions of the whole route** (outbound
 defaults: `1/14 · 0.55` and `1/14 · 0.45`; return: `1/18 · 0.45` and

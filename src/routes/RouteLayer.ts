@@ -20,6 +20,7 @@ import { GreatCircleCurve } from './GreatCircleCurve.js';
 import { ROUTE_FRAGMENT, ROUTE_VERTEX } from './routeShader.js';
 import {
   dashUniforms,
+  globeTubeRadius,
   resolveRouteStyle,
   type ResolvedPathStyle,
   type ResolvedRouteStyle,
@@ -218,7 +219,9 @@ export class RouteLayer {
 
   private buildArc(spec: RouteArcSpec, style: ResolvedPathStyle, progress = 0): ArcObject {
     const curve = new GreatCircleCurve(spec.from, spec.to, spec.lift, spec.angle);
-    const geometry = new THREE.TubeGeometry(curve, 128, style.width, 8, false);
+    // `width` may be authored in px (docs / studio) — convert it to a sane
+    // tube radius (a raw px value built a planet-sized tube: globeTubeRadius).
+    const geometry = new THREE.TubeGeometry(curve, 128, globeTubeRadius(style.width), 8, false);
     const dash = style.dash ? dashUniforms(style.dash) : null;
     const material = new THREE.ShaderMaterial({
       vertexShader: ROUTE_VERTEX,

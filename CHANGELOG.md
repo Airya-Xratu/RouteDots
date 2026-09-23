@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **3D globe: route-line customizations now show.** `route.width` /
+  `route.dash.width` are authored in px by the docs and the customization
+  studio (e.g. `dash: { …, width: 1.8 }`), but the globe fed the raw number
+  into `TubeGeometry` as a tube radius **in globe radii** — a 1.8-radius tube
+  is bigger than the planet, the camera ends up inside it and the lines
+  disappear. Widths above `0.05` (the legacy globe-radius range) are now read
+  as px and converted to a tube radius that matches the flat map's stroke, so
+  one number styles both worlds; small legacy values keep their meaning
+  (`globeTubeRadius` in `routes/routeStyle.ts`).
+- Live restyling (`setOptions`) now re-aims the plane onto the customized
+  outbound curve (a changed curve **angle** / **lift** used to leave the plane
+  flying the old path), and a plane enabled at runtime picks up the current
+  route immediately.
+
 ### Added
 
 - Country fills: the map surface is now grey country shapes with white

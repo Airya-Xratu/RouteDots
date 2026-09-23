@@ -469,6 +469,18 @@ export class RouteDots {
         startDelayMs: o.plane?.startDelayMs,
         icon: o.plane?.icon,
       });
+      // Keep the plane on the arc it should fly: a live restyle may have
+      // changed the curve (angle / lift), and a freshly-enabled plane needs
+      // its arc in the first place.
+      if (this.plane && this.route && this.layer) {
+        const outbound = this.layer.resolvedStyle.outbound;
+        this.plane.setArc(
+          this.route.from,
+          this.route.to,
+          { lift: outbound.lift, angle: outbound.angle },
+          performance.now(),
+        );
+      }
       if (o.cities?.enabled === false) {
         this.cityMarkers?.dispose();
         this.cityMarkers = null;
