@@ -233,7 +233,8 @@
         position: absolute;
         right: 28px;
         bottom: 28px;
-        z-index: 3;
+        z-index: 5;
+        transition: right 180ms ease;
         display: flex;
         align-items: center;
         gap: 10px;
@@ -355,6 +356,133 @@
         flex-wrap: wrap;
         gap: 8px;
       }
+      /* Customization studio — every new option, wired straight to the
+         public API (setColors / setOptions / setWorld). */
+      .studio {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 348px;
+        padding: 74px 18px 22px;
+        overflow-y: auto;
+        background: rgba(27, 28, 33, 0.97);
+        color: #e8e9ec;
+        box-shadow: -24px 0 60px rgba(20, 22, 28, 0.35);
+        z-index: 4;
+      }
+      .studio[hidden] {
+        display: none;
+      }
+      body.studio-open .corner {
+        right: 372px;
+      }
+      .studio-head strong {
+        display: block;
+        font-size: 15px;
+        letter-spacing: -0.01em;
+      }
+      .studio-sub {
+        display: block;
+        margin-top: 5px;
+        font-size: 12px;
+        line-height: 1.55;
+        color: #9aa0aa;
+      }
+      .studio .grp {
+        margin-top: 16px;
+        border-top: 1px solid #34353b;
+        padding-top: 14px;
+      }
+      .studio h4 {
+        margin: 0 0 11px;
+        font-size: 11px;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: #9aa0aa;
+      }
+      .studio label.row {
+        display: grid;
+        grid-template-columns: minmax(58px, 1fr) 104px 46px;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 9px;
+        font-size: 12.5px;
+      }
+      .studio label.row.wide {
+        grid-template-columns: minmax(58px, 1fr) auto;
+      }
+      .studio label.row > span {
+        color: #c6cad2;
+      }
+      .studio .num {
+        font-size: 11.5px;
+        font-weight: 500;
+        color: #8b9099;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .studio input[type='range'] {
+        width: 100%;
+        accent-color: #7dd3fc;
+      }
+      .studio input[type='checkbox'] {
+        accent-color: #7dd3fc;
+      }
+      .studio select,
+      .studio input[type='text'] {
+        width: 100%;
+        background: #17181c;
+        color: #e8e9ec;
+        border: 1px solid #34353b;
+        border-radius: 8px;
+        padding: 6px 8px;
+        font-size: 12.5px;
+        font-family: inherit;
+      }
+      .studio input[type='color'] {
+        width: 44px;
+        height: 26px;
+        padding: 0;
+        border: 1px solid #4b4d55;
+        border-radius: 7px;
+        background: transparent;
+        cursor: pointer;
+      }
+      .studio .note {
+        margin: 2px 0 10px;
+        font-size: 11.5px;
+        color: #8b9099;
+        line-height: 1.5;
+      }
+      .studio-code {
+        margin: 16px 0 0;
+        padding: 14px 14px;
+        border-radius: 12px;
+        font-size: 10.5px;
+        line-height: 1.55;
+        max-height: 210px;
+      }
+      .studio-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .studio-actions button {
+        flex: 1;
+        border: 1px solid #43454d;
+        background: #2f3037;
+        color: #e8e9ec;
+        border-radius: 9px;
+        padding: 9px 10px;
+        font-size: 12.5px;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .studio-actions button:hover {
+        border-color: #6b7280;
+      }
+
       @media (max-width: 760px) {
         .panel {
           left: 16px;
@@ -369,6 +497,11 @@
         }
         .nav {
           padding: 16px 20px;
+        }
+        .studio {
+          width: auto;
+          left: 0;
+          padding: 70px 16px 20px;
         }
       }
     </style>
@@ -386,7 +519,9 @@
         <h1>See your journey before you book it.</h1>
         <p>
           Pick a departure and a destination — your route draws itself across a real, spherical dot
-          globe, with the return path separated for round trips.
+          globe, with the return path separated for round trips. Then hit
+          <strong>🎛</strong> to open the customization studio: colours, the plane icon, the city
+          ripple, the dashes, each leg's curve angle and the 3D camera, all live.
         </p>
       </div>
 
@@ -432,6 +567,17 @@
         <div class="badge">Interactive demo · <span id="mode">…</span></div>
         <button
           class="theme"
+          id="studio-toggle"
+          type="button"
+          title="Open the customization studio"
+          aria-label="Open the customization studio"
+          aria-expanded="false"
+          aria-controls="studio"
+        >
+          🎛
+        </button>
+        <button
+          class="theme"
           id="theme"
           type="button"
           title="Switch to dark theme"
@@ -440,6 +586,27 @@
           🌙
         </button>
       </div>
+
+      <aside class="studio" id="studio" aria-label="Customization studio" hidden>
+        <div class="studio-head">
+          <strong>Customization studio</strong>
+          <span class="studio-sub">
+            Every knob below calls the public API — <code>setColors()</code>,
+            <code>setOptions()</code>, <code>setWorld()</code> — so anything this page can do, your
+            app can do.
+          </span>
+        </div>
+        <div id="studio-world"></div>
+        <div id="studio-colors"></div>
+        <div id="studio-plane"></div>
+        <div id="studio-cities"></div>
+        <div id="studio-dashes"></div>
+        <div id="studio-angles"></div>
+        <pre class="studio-code" id="studio-code"></pre>
+        <div class="studio-actions">
+          <button type="button" id="studio-reset">Reset to defaults</button>
+        </div>
+      </aside>
     </section>
 
     <section class="features">
@@ -471,6 +638,21 @@
         </p>
       </div>
       <div class="feature">
+        <h3>🎛 Yours to style</h3>
+        <p>
+          One palette for every colour, plus the plane icon, the city ripple, the dash pattern and
+          each leg's curve angle — set them up front or restyle a live scene with
+          <code>setOptions()</code>.
+        </p>
+      </div>
+      <div class="feature">
+        <h3>🌐 Globe or flat, 3D either way</h3>
+        <p>
+          Render the sphere or an equirectangular map — and give the flat one a real 3D camera:
+          perspective, drag-to-orbit, zoom and depth-layered routes.
+        </p>
+      </div>
+      <div class="feature">
         <h3>🪶 Feathers light</h3>
         <p>
           One dependency (three.js), a bundled 110m land mask, ~9 kB gz of RouteDots core, and a
@@ -495,6 +677,18 @@
   // From your flight form:
   document.getElementById('search').addEventListener('click', () =&gt; {
     rd.setRoute('LHR', 'DXB', { roundTrip: true });
+  });
+
+  // Make it yours — every value applies live:
+  rd.setOptions({
+    colors: { outbound: '#0ea5e9', plane: '#0ea5e9' },  // or rd.setColors({...})
+    route: {
+      outbound: { angle: 30, dash: { length: 0.04, gap: 0.02, speed: 2, width: 2.4 } },
+      return: { angle: -30, lift: 0.28 },
+    },
+    cities: { periodMs: 1200, ripple: { size: 0.02, width: 0.004, grow: 4 } },
+    plane: { icon: 'jet', size: 0.03 },
+    camera3d: { enabled: true, tilt: 40, yaw: -12, depth: 90, interactive: true },
   });
 &lt;/script&gt;</pre>
     </section>
@@ -648,6 +842,709 @@
           toSel.value = a;
           apply();
         });
+
+        // ── Customization studio ─────────────────────────────────────────────
+        // Every control below calls the public API — setColors(), setOptions()
+        // and setWorld() — so the studio demonstrates exactly what a host app
+        // can do, and the snippet at the bottom is the call it just made.
+        const studioEl = document.getElementById('studio');
+        const studioToggle = document.getElementById('studio-toggle');
+        const codeEl = document.getElementById('studio-code');
+
+        // The library defaults, so "Reset" can put every knob back.
+        const STUDIO_DEFAULTS = {
+          route: {
+            outbound: { angle: 0, dash: { length: 0.039, gap: 0.032, speed: 4.9, width: 1.8 } },
+            return: { angle: 0, dash: { length: 0.025, gap: 0.031, speed: 3.96, width: 1.4 } },
+          },
+          cities: {
+            periodMs: 2600,
+            dot: { size: 0.006, dim: 0.45 },
+            ripple: { size: 0.011, width: 0.0025, grow: 2.6, opacity: 0.55 },
+          },
+          plane: { icon: 'airliner', size: 30 },
+          camera3d: {
+            enabled: false,
+            perspective: 1400,
+            tilt: 32,
+            yaw: -6,
+            depth: 44,
+            interactive: false,
+          },
+        };
+        let studio = JSON.parse(JSON.stringify(STUDIO_DEFAULTS));
+        let dashLeg = 'both';
+        let worldMode = 'auto';
+        let customIconPath = '';
+        const paletteOverrides = {};
+
+        // ── tiny control builders (label + input + readout) ──────────────────
+        const section = (hostId, title) => {
+          const box = document.createElement('section');
+          box.className = 'grp';
+          const heading = document.createElement('h4');
+          heading.textContent = title;
+          box.appendChild(heading);
+          document.getElementById(hostId).appendChild(box);
+          return box;
+        };
+        const note = (host, text) => {
+          const p = document.createElement('p');
+          p.className = 'note';
+          p.textContent = text;
+          host.appendChild(p);
+        };
+        const slider = (host, spec) => {
+          const wrap = document.createElement('label');
+          wrap.className = 'row';
+          wrap.setAttribute('for', spec.id);
+          const caption = document.createElement('span');
+          caption.textContent = spec.label;
+          const input = document.createElement('input');
+          input.type = 'range';
+          input.id = spec.id;
+          input.min = String(spec.min);
+          input.max = String(spec.max);
+          input.step = String(spec.step);
+          const num = document.createElement('b');
+          num.className = 'num';
+          wrap.append(caption, input, num);
+          host.appendChild(wrap);
+          const paint = (value) => {
+            input.value = String(value);
+            num.textContent = spec.format(Number(value));
+          };
+          paint(spec.value);
+          input.addEventListener('input', () => {
+            num.textContent = spec.format(Number(input.value));
+            spec.onInput(Number(input.value));
+          });
+          return { input, paint };
+        };
+        const selection = (host, spec) => {
+          const wrap = document.createElement('label');
+          wrap.className = 'row wide';
+          wrap.setAttribute('for', spec.id);
+          const caption = document.createElement('span');
+          caption.textContent = spec.label;
+          const select = document.createElement('select');
+          select.id = spec.id;
+          for (const [value, label] of spec.options) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            select.appendChild(option);
+          }
+          select.value = spec.value;
+          wrap.append(caption, select);
+          host.appendChild(wrap);
+          select.addEventListener('change', () => spec.onChange(select.value));
+          return select;
+        };
+        const checkbox = (host, spec) => {
+          const wrap = document.createElement('label');
+          wrap.className = 'row wide';
+          wrap.setAttribute('for', spec.id);
+          const caption = document.createElement('span');
+          caption.textContent = spec.label;
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          input.id = spec.id;
+          wrap.append(caption, input);
+          host.appendChild(wrap);
+          const paint = (checked) => {
+            input.checked = checked;
+          };
+          paint(spec.checked);
+          input.addEventListener('change', () => spec.onChange(input.checked));
+          return { input, paint };
+        };
+        const textField = (host, spec) => {
+          const wrap = document.createElement('label');
+          wrap.className = 'row wide';
+          wrap.setAttribute('for', spec.id);
+          const caption = document.createElement('span');
+          caption.textContent = spec.label;
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.id = spec.id;
+          input.placeholder = spec.placeholder;
+          input.value = spec.value;
+          wrap.append(caption, input);
+          host.appendChild(wrap);
+          input.addEventListener('input', () => spec.onInput(input.value));
+          return { input };
+        };
+
+        // Sliders are cheap to move but not to re-render a scene for: coalesce
+        // every change into one frame.
+        const queued = new Set();
+        let queuedFrame = 0;
+        const schedule = (fn) => {
+          queued.add(fn);
+          if (queuedFrame) return;
+          queuedFrame = requestAnimationFrame(() => {
+            queuedFrame = 0;
+            const run = [...queued];
+            queued.clear();
+            for (const task of run) task();
+            showSnippet();
+          });
+        };
+
+        // ── applying state through the public API ───────────────────────────
+        const applyColors = () => rd.setColors({ ...paletteOverrides });
+        const applyRoute = () =>
+          rd.setOptions({
+            route: {
+              outbound: {
+                angle: studio.route.outbound.angle,
+                dash: { ...studio.route.outbound.dash },
+              },
+              return: { angle: studio.route.return.angle, dash: { ...studio.route.return.dash } },
+            },
+          });
+        const applyCities = () =>
+          rd.setOptions({
+            cities: {
+              periodMs: studio.cities.periodMs,
+              dot: { ...studio.cities.dot },
+              ripple: { ...studio.cities.ripple },
+            },
+          });
+        const planeIcon = () =>
+          studio.plane.icon === 'custom' && customIconPath.trim()
+            ? { path: customIconPath.trim(), viewBox: 100 }
+            : studio.plane.icon;
+        // The sprite is sized in globe units in the 3D world and in px in the
+        // flat one; one slider, converted (30 px ≈ the globe's 0.024 units).
+        const PLANE_PX_PER_UNIT = 1250;
+        const planeSizeForWorld = () =>
+          rd.mode === 'webgl' ? round(studio.plane.size / PLANE_PX_PER_UNIT, 4) : studio.plane.size;
+        const applyPlane = () =>
+          rd.setOptions({ plane: { icon: planeIcon(), size: planeSizeForWorld() } });
+        const applyCamera = () => rd.setOptions({ camera3d: { ...studio.camera3d } });
+
+        // ── World + 3D camera ───────────────────────────────────────────────
+        const worldBox = section('studio-world', 'World');
+        const worldSelect = selection(worldBox, {
+          id: 'world',
+          label: 'Render mode',
+          options: [
+            ['auto', 'Auto (WebGL → flat)'],
+            ['globe', '3D globe'],
+            ['flat', 'Flat map'],
+          ],
+          value: 'auto',
+          onChange: (value) => {
+            worldMode = value;
+            rd.setWorld(value);
+            // The plane's size unit follows the world.
+            schedule(applyPlane);
+            showSnippet();
+          },
+        });
+        note(
+          worldBox,
+          'The 3D camera belongs to the flat map: turning it on switches the world there.',
+        );
+        const camToggle = checkbox(worldBox, {
+          id: 'cam3d',
+          label: '3D camera effect',
+          checked: false,
+          onChange: (on) => {
+            studio.camera3d.enabled = on;
+            if (on && rd.mode !== 'flat') {
+              worldMode = 'flat';
+              worldSelect.value = 'flat';
+              rd.setWorld('flat');
+            }
+            if (on && !studio.camera3d.interactive) {
+              studio.camera3d.interactive = true;
+              camInteractive.paint(true);
+            }
+            schedule(applyCamera);
+          },
+        });
+        const camPerspective = slider(worldBox, {
+          id: 'cam-perspective',
+          label: 'Perspective',
+          min: 300,
+          max: 6000,
+          step: 50,
+          value: STUDIO_DEFAULTS.camera3d.perspective,
+          format: (v) => `${v}px`,
+          onInput: (v) => {
+            studio.camera3d.perspective = v;
+            schedule(applyCamera);
+          },
+        });
+        const camTilt = slider(worldBox, {
+          id: 'cam-tilt',
+          label: 'Tilt',
+          min: -78,
+          max: 78,
+          step: 1,
+          value: STUDIO_DEFAULTS.camera3d.tilt,
+          format: (v) => `${v}°`,
+          onInput: (v) => {
+            studio.camera3d.tilt = v;
+            schedule(applyCamera);
+          },
+        });
+        const camYaw = slider(worldBox, {
+          id: 'cam-yaw',
+          label: 'Yaw',
+          min: -70,
+          max: 70,
+          step: 1,
+          value: STUDIO_DEFAULTS.camera3d.yaw,
+          format: (v) => `${v}°`,
+          onInput: (v) => {
+            studio.camera3d.yaw = v;
+            schedule(applyCamera);
+          },
+        });
+        const camDepth = slider(worldBox, {
+          id: 'cam-depth',
+          label: 'Layer depth',
+          min: 0,
+          max: 400,
+          step: 5,
+          value: STUDIO_DEFAULTS.camera3d.depth,
+          format: (v) => `${v}px`,
+          onInput: (v) => {
+            studio.camera3d.depth = v;
+            schedule(applyCamera);
+          },
+        });
+        const camInteractive = checkbox(worldBox, {
+          id: 'cam-interactive',
+          label: 'Orbit + zoom (drag / scroll)',
+          checked: false,
+          onChange: (on) => {
+            studio.camera3d.interactive = on;
+            schedule(applyCamera);
+          },
+        });
+        note(worldBox, 'Drag the flat map to orbit the camera; scroll to zoom.');
+
+        // ── Colours ─────────────────────────────────────────────────────────
+        const colorsBox = section('studio-colors', 'Colours');
+        const COLOR_KEYS = [
+          ['outbound', 'Outbound route'],
+          ['return', 'Return route'],
+          ['plane', 'Plane'],
+          ['cities', 'Cities + ripple'],
+          ['marker', 'Pins + markers'],
+          ['borders', 'Borders'],
+          ['countries', 'Countries'],
+          ['ocean', 'Ocean'],
+        ];
+        const colorInputs = {};
+        for (const [key, label] of COLOR_KEYS) {
+          const wrap = document.createElement('label');
+          wrap.className = 'row wide';
+          wrap.setAttribute('for', `color-${key}`);
+          const caption = document.createElement('span');
+          caption.textContent = label;
+          const input = document.createElement('input');
+          input.type = 'color';
+          input.id = `color-${key}`;
+          wrap.append(caption, input);
+          colorsBox.appendChild(wrap);
+          colorInputs[key] = input;
+          input.addEventListener('input', () => {
+            paletteOverrides[key] = input.value;
+            schedule(applyColors);
+          });
+        }
+        note(colorsBox, 'Picked colours override the theme; the rest keep following it.');
+        // Colours the developer has not overridden follow the theme switch.
+        const syncColors = () => {
+          const active = rd.activePalette;
+          for (const [key] of COLOR_KEYS) {
+            if (!(key in paletteOverrides) && active[key]) colorInputs[key].value = active[key];
+          }
+        };
+        syncColors();
+
+        // ── Plane icon ──────────────────────────────────────────────────────
+        const planeBox = section('studio-plane', 'Plane icon');
+        const pathField = textField(planeBox, {
+          id: 'plane-path',
+          label: 'Path data',
+          placeholder: 'M0,-40 L18,26 L-18,26 Z',
+          value: '',
+          onInput: (value) => {
+            customIconPath = value;
+            schedule(applyPlane);
+          },
+        });
+        const planeIconSelect = selection(planeBox, {
+          id: 'plane-icon',
+          label: 'Icon',
+          options: [
+            ['airliner', 'Airliner'],
+            ['jet', 'Jet'],
+            ['arrow', 'Arrow'],
+            ['dot', 'Dot'],
+            ['custom', 'Custom path'],
+          ],
+          value: 'airliner',
+          onChange: (value) => {
+            studio.plane.icon = value;
+            pathField.input.disabled = value !== 'custom';
+            if (value === 'custom' && !customIconPath.trim())
+              customIconPath = pathField.input.value;
+            schedule(applyPlane);
+          },
+        });
+        pathField.input.disabled = true;
+        const planeSize = slider(planeBox, {
+          id: 'plane-size',
+          label: 'Size',
+          min: 8,
+          max: 80,
+          step: 1,
+          value: STUDIO_DEFAULTS.plane.size,
+          format: (v) => `${v}px`,
+          onInput: (v) => {
+            studio.plane.size = v;
+            schedule(applyPlane);
+          },
+        });
+        note(planeBox, 'Any SVG `path` data, or one of the four built-in presets.');
+
+        // ── City ripple ─────────────────────────────────────────────────────
+        const cityBox = section('studio-cities', 'City ripple');
+        const cityPeriod = slider(cityBox, {
+          id: 'city-period',
+          label: 'Period',
+          min: 200,
+          max: 6000,
+          step: 50,
+          value: 2600,
+          format: (v) => `${v}ms`,
+          onInput: (v) => {
+            studio.cities.periodMs = v;
+            schedule(applyCities);
+          },
+        });
+        const cityDot = slider(cityBox, {
+          id: 'city-dot',
+          label: 'Dot size',
+          min: 0.001,
+          max: 0.03,
+          step: 0.001,
+          value: 0.006,
+          format: (v) => v.toFixed(3),
+          onInput: (v) => {
+            studio.cities.dot.size = v;
+            schedule(applyCities);
+          },
+        });
+        const cityDim = slider(cityBox, {
+          id: 'city-dim',
+          label: 'Dot dim',
+          min: 0,
+          max: 1,
+          step: 0.05,
+          value: 0.45,
+          format: (v) => v.toFixed(2),
+          onInput: (v) => {
+            studio.cities.dot.dim = v;
+            schedule(applyCities);
+          },
+        });
+        const cityRing = slider(cityBox, {
+          id: 'city-ring',
+          label: 'Ring size',
+          min: 0.002,
+          max: 0.06,
+          step: 0.001,
+          value: 0.011,
+          format: (v) => v.toFixed(3),
+          onInput: (v) => {
+            studio.cities.ripple.size = v;
+            schedule(applyCities);
+          },
+        });
+        const cityRingWidth = slider(cityBox, {
+          id: 'city-ring-width',
+          label: 'Ring width',
+          min: 0.0005,
+          max: 0.02,
+          step: 0.0005,
+          value: 0.0025,
+          format: (v) => v.toFixed(4),
+          onInput: (v) => {
+            studio.cities.ripple.width = v;
+            schedule(applyCities);
+          },
+        });
+        const cityGrow = slider(cityBox, {
+          id: 'city-grow',
+          label: 'Ring growth',
+          min: 0,
+          max: 8,
+          step: 0.1,
+          value: 2.6,
+          format: (v) => `${v.toFixed(1)}×`,
+          onInput: (v) => {
+            studio.cities.ripple.grow = v;
+            schedule(applyCities);
+          },
+        });
+        const cityOpacity = slider(cityBox, {
+          id: 'city-opacity',
+          label: 'Ring opacity',
+          min: 0,
+          max: 1,
+          step: 0.05,
+          value: 0.55,
+          format: (v) => v.toFixed(2),
+          onInput: (v) => {
+            studio.cities.ripple.opacity = v;
+            schedule(applyCities);
+          },
+        });
+        note(cityBox, 'Both worlds share one ripple: the globe shader and the flat keyframes.');
+
+        // ── Dashes ──────────────────────────────────────────────────────────
+        const dashBox = section('studio-dashes', 'Route dashes');
+        selection(dashBox, {
+          id: 'dash-leg',
+          label: 'Applies to',
+          options: [
+            ['both', 'Both legs'],
+            ['outbound', 'Outbound'],
+            ['return', 'Return'],
+          ],
+          value: 'both',
+          onChange: (value) => {
+            dashLeg = value;
+            loadDash();
+          },
+        });
+        const dashTargets = () => (dashLeg === 'both' ? ['outbound', 'return'] : [dashLeg]);
+        const writeDash = (key, value) => {
+          for (const leg of dashTargets()) studio.route[leg].dash[key] = value;
+          schedule(applyRoute);
+        };
+        const dashLength = slider(dashBox, {
+          id: 'dash-length',
+          label: 'Dash length',
+          min: 0.005,
+          max: 0.2,
+          step: 0.001,
+          value: STUDIO_DEFAULTS.route.outbound.dash.length,
+          format: (v) => `${(v * 100).toFixed(1)}%`,
+          onInput: (v) => writeDash('length', v),
+        });
+        const dashGap = slider(dashBox, {
+          id: 'dash-gap',
+          label: 'Gap',
+          min: 0.005,
+          max: 0.2,
+          step: 0.001,
+          value: STUDIO_DEFAULTS.route.outbound.dash.gap,
+          format: (v) => `${(v * 100).toFixed(1)}%`,
+          onInput: (v) => writeDash('gap', v),
+        });
+        const dashSpeed = slider(dashBox, {
+          id: 'dash-speed',
+          label: 'Flow speed',
+          min: 0,
+          max: 15,
+          step: 0.2,
+          value: STUDIO_DEFAULTS.route.outbound.dash.speed,
+          format: (v) => `${v.toFixed(1)}/s`,
+          onInput: (v) => writeDash('speed', v),
+        });
+        const dashWidth = slider(dashBox, {
+          id: 'dash-width',
+          label: 'Thickness',
+          min: 0.5,
+          max: 6,
+          step: 0.1,
+          value: STUDIO_DEFAULTS.route.outbound.dash.width,
+          format: (v) => `${v.toFixed(1)}px`,
+          onInput: (v) => writeDash('width', v),
+        });
+        const loadDash = () => {
+          const leg = dashLeg === 'both' ? 'outbound' : dashLeg;
+          const dash = studio.route[leg].dash;
+          dashLength.paint(dash.length);
+          dashGap.paint(dash.gap);
+          dashSpeed.paint(dash.speed);
+          dashWidth.paint(dash.width);
+        };
+        note(
+          dashBox,
+          'Length and gap are fractions of the whole route, and the colour follows the route ' +
+            'colour — so a dash defined once looks the same in both worlds.',
+        );
+
+        // ── Curve angle ─────────────────────────────────────────────────────
+        const angleBox = section('studio-angles', 'Curve angle');
+        const angleOut = slider(angleBox, {
+          id: 'angle-outbound',
+          label: 'Outbound',
+          min: -85,
+          max: 85,
+          step: 1,
+          value: 0,
+          format: (v) => `${v}°`,
+          onInput: (v) => {
+            studio.route.outbound.angle = v;
+            schedule(applyRoute);
+          },
+        });
+        const angleBack = slider(angleBox, {
+          id: 'angle-return',
+          label: 'Return',
+          min: -85,
+          max: 85,
+          step: 1,
+          value: 0,
+          format: (v) => `${v}°`,
+          onInput: (v) => {
+            studio.route.return.angle = v;
+            schedule(applyRoute);
+          },
+        });
+        note(
+          angleBox,
+          'Banks each leg out of its great-circle plane, up to ±85°. Both endpoints stay put, ' +
+            'and the plane follows the same curve.',
+        );
+
+        // ── the equivalent snippet, always current ──────────────────────────
+        const round = (value, digits) => Number(value.toFixed(digits));
+        const showSnippet = () => {
+          const snippet = {
+            route: {
+              outbound: {
+                angle: studio.route.outbound.angle,
+                dash: {
+                  length: round(studio.route.outbound.dash.length, 3),
+                  gap: round(studio.route.outbound.dash.gap, 3),
+                  speed: round(studio.route.outbound.dash.speed, 2),
+                  width: round(studio.route.outbound.dash.width, 2),
+                },
+              },
+              return: {
+                angle: studio.route.return.angle,
+                dash: {
+                  length: round(studio.route.return.dash.length, 3),
+                  gap: round(studio.route.return.dash.gap, 3),
+                  speed: round(studio.route.return.dash.speed, 2),
+                  width: round(studio.route.return.dash.width, 2),
+                },
+              },
+            },
+            cities: {
+              periodMs: studio.cities.periodMs,
+              dot: {
+                size: round(studio.cities.dot.size, 3),
+                dim: round(studio.cities.dot.dim, 2),
+              },
+              ripple: {
+                size: round(studio.cities.ripple.size, 3),
+                width: round(studio.cities.ripple.width, 4),
+                grow: round(studio.cities.ripple.grow, 1),
+                opacity: round(studio.cities.ripple.opacity, 2),
+              },
+            },
+            plane: { icon: planeIcon(), size: planeSizeForWorld() },
+            camera3d: {
+              enabled: studio.camera3d.enabled,
+              perspective: studio.camera3d.perspective,
+              tilt: studio.camera3d.tilt,
+              yaw: studio.camera3d.yaw,
+              depth: studio.camera3d.depth,
+              interactive: studio.camera3d.interactive,
+            },
+          };
+          const lines = [];
+          if (Object.keys(paletteOverrides).length) {
+            lines.push(`rd.setColors(${JSON.stringify(paletteOverrides)});`);
+          }
+          lines.push(`rd.setOptions(${JSON.stringify(snippet, null, 2)});`);
+          if (worldMode !== 'auto') lines.push(`rd.setWorld('${worldMode}');`);
+          codeEl.textContent = lines.join('\n');
+        };
+
+        const paintAll = () => {
+          camToggle.paint(studio.camera3d.enabled);
+          camPerspective.paint(studio.camera3d.perspective);
+          camTilt.paint(studio.camera3d.tilt);
+          camYaw.paint(studio.camera3d.yaw);
+          camDepth.paint(studio.camera3d.depth);
+          camInteractive.paint(studio.camera3d.interactive);
+          planeIconSelect.value = studio.plane.icon;
+          pathField.input.disabled = studio.plane.icon !== 'custom';
+          planeSize.paint(studio.plane.size);
+          cityPeriod.paint(studio.cities.periodMs);
+          cityDot.paint(studio.cities.dot.size);
+          cityDim.paint(studio.cities.dot.dim);
+          cityRing.paint(studio.cities.ripple.size);
+          cityRingWidth.paint(studio.cities.ripple.width);
+          cityGrow.paint(studio.cities.ripple.grow);
+          cityOpacity.paint(studio.cities.ripple.opacity);
+          angleOut.paint(studio.route.outbound.angle);
+          angleBack.paint(studio.route.return.angle);
+          loadDash();
+        };
+        paintAll();
+        showSnippet();
+
+        document.getElementById('studio-reset').addEventListener('click', () => {
+          studio = JSON.parse(JSON.stringify(STUDIO_DEFAULTS));
+          dashLeg = 'both';
+          worldMode = 'auto';
+          customIconPath = '';
+          for (const key of Object.keys(paletteOverrides)) delete paletteOverrides[key];
+          document.getElementById('dash-leg').value = 'both';
+          worldSelect.value = 'auto';
+          paintAll();
+          rd.resetColors();
+          syncColors();
+          rd.setOptions({
+            route: {
+              outbound: { angle: 0, dash: { ...studio.route.outbound.dash } },
+              return: { angle: 0, dash: { ...studio.route.return.dash } },
+            },
+            cities: {
+              periodMs: studio.cities.periodMs,
+              dot: { ...studio.cities.dot },
+              ripple: { ...studio.cities.ripple },
+            },
+            plane: { icon: studio.plane.icon, size: planeSizeForWorld() },
+            camera3d: { ...studio.camera3d },
+          });
+          rd.setWorld('auto');
+          showSnippet();
+        });
+
+        studioToggle.addEventListener('click', () => {
+          const open = studioEl.hidden;
+          studioEl.hidden = !open;
+          document.body.classList.toggle('studio-open', open);
+          studioToggle.textContent = open ? '✕' : '🎛';
+          studioToggle.setAttribute('aria-expanded', String(open));
+          const label = open ? 'Close the customization studio' : 'Open the customization studio';
+          studioToggle.title = label;
+          studioToggle.setAttribute('aria-label', label);
+          if (open) {
+            syncColors();
+            showSnippet();
+          }
+        });
+
+        // Colours the user has not overridden follow the theme switch.
+        themeBtn.addEventListener('click', syncColors);
 
         // Default route after mount (the selects are pre-set to LHR → DXB).
         apply();

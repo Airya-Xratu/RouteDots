@@ -6,77 +6,100 @@
  * ```ts
  * import { RouteDots } from 'routedots';
  *
- * const rd = new RouteDots(document.getElementById('hero')!);
+ * const rd = new RouteDots(document.getElementById('hero')!, {
+ *   colors: { outbound: '#0ea5e9', plane: '#0f172a' },
+ *   route: { outbound: { angle: 18, dash: { length: 0.03, gap: 0.02 } } },
+ * });
  * rd.setRoute('LHR', 'DXB', { roundTrip: true });
  * ```
  *
- * Falls back to a flat 2D dot map (`FlatRouteMap`) when WebGL is unavailable,
- * so heroes degrade gracefully instead of breaking.
+ * Two worlds are available (option `world`): the 3D globe (`globe`, WebGL)
+ * and the flat map (`flat`) — the latter with an optional 3D camera effect
+ * (`camera3d`). `world: 'auto'` (the default) picks the globe when WebGL is
+ * available and the flat world otherwise, so heroes degrade gracefully.
+ *
+ * Every colour, dash, curve angle, city ripple and the plane icon are the
+ * developer's to set — at construction (`options`) or live (`setColors`,
+ * `setOptions`).
  */
-import {
-  GlobeRenderer,
-  GLOBE_THEMES,
-  supportsWebGL,
-  type GlobeRendererOptions,
-  type GlobeThemeColors,
-} from './globe/GlobeRenderer.js';
+import { GlobeRenderer, supportsWebGL, type GlobeRendererOptions } from './globe/GlobeRenderer.js';
 import type { ViewState } from './globe/cameraRig.js';
 import { RouteLayer, type RouteLayerOptions } from './routes/RouteLayer.js';
 import { PlaneLayer, type PlaneLayerOptions } from './routes/PlaneLayer.js';
 import { trackCamera } from './routes/cameraTracking.js';
 import { EndpointLabels } from './routes/EndpointLabels.js';
 import { CityMarkersLayer } from './globe/CityMarkersLayer.js';
+import type { ResolvedRouteStyle, RouteStyleOptions } from './routes/routeStyle.js';
 import { FlatRouteMap, type FlatRouteMapOptions } from './flat/FlatRouteMap.js';
+import type { FlatCamera3DOptions, ResolvedFlatCamera3D } from './flat/camera3d.js';
+import type { CityMarkersOptions, ResolvedCityMarkers } from './markers/rippleStyle.js';
 import { angularDistance, DEG, greatCircleMidpoint } from './core/greatCircle.js';
 import type { TopoLand } from './core/topojson.js';
+import { resolvePalette, type RouteDotsColors, type RouteDotsPalette } from './theme.js';
 import { CITIES, resolveCity, type CityRef } from './cities.js';
-import type { City, LatLon, MapSurface } from './types.js';
+import type { City, LatLon, MapSurface, WorldMode } from './types.js';
 
 export type RouteDotsMode = 'webgl' | 'flat';
 
 export interface RouteDotsOptions {
   theme?: 'light' | 'dark';
   /**
+   * Which world to render:
+   *
+   * - `'auto'` (default) — the 3D globe when WebGL is available, the flat
+   *   world otherwise.
+   * - `'globe'` — force the 3D globe (falls back to the flat world when the
+   *   browser cannot create a WebGL context).
+   * - `'flat'` — force the flat world, with or without WebGL (pair it with
+   *   `camera3d` for the 3D camera effect).
+   */
+  world?: WorldMode;
+  /**
    * Map surface: grey country shapes with white borders (`countries`, the
    * default) or the classic dot lattice (`dots`).
    */
   surface?: MapSurface;
-  /** Override individual globe colours (WebGL mode). */
-  colors?: Partial<GlobeThemeColors>;
-  /** Initial camera view (WebGL mode). */
+  /**
+   * Every colour in one place — see {@link RouteDotsPalette}. Unknown keys
+   * are ignored; the legacy `globe` / `land` aliases still work. Apply more
+   * at runtime with {@link RouteDots.setColors}.
+   */
+  colors?: RouteDotsColors;
+  /** Initial camera view (3D world). */
   view?: ViewState;
   autoRotate?: { enabled?: boolean; speed?: number };
   interactive?: boolean;
   texture?: { stepDeg?: number; resDeg?: number; dotSizeDeg?: number; width?: number };
-  route?: {
-    outboundLift?: number;
-    returnLift?: number;
-    arcRadius?: number;
-    drawDurationMs?: number;
-    staggerMs?: number;
-    pulse?: boolean;
-  };
+  /**
+   * Route styling. Top-level keys are shared defaults; `outbound` and
+   * `return` style each leg — colour, opacity, lift, **curve angle**, width
+   * and **dashes** (colour, length, gap, speed, width). The legacy
+   * `outboundLift` / `returnLift` / `arcRadius` keys still work.
+   */
+  route?: RouteStyleOptions;
+  /**
+   * The plane: timing, colour, size — and the **icon component**
+   * (`icon: 'jet'`, SVG path data, or a custom draw function).
+   */
   plane?: PlaneLayerOptions & { enabled?: boolean };
   /**
-   * Blinking circles at every airport city (WebGL + flat fallback).
-   * `list` replaces the bundled city dataset.
+   * Blinking city dots and their **ripple rings**: colour, sizes, grow,
+   * opacity and period. `list` replaces the bundled city dataset.
    */
-  cities?: {
-    enabled?: boolean;
-    color?: string;
-    periodMs?: number;
-    list?: readonly City[];
-  };
+  cities?: CityMarkersOptions & { list?: readonly City[] };
+  /** 3D camera effect for the flat world (perspective, tilt, depth, orbit). */
+  camera3d?: FlatCamera3DOptions;
   /** Camera pan/zoom when a route is set (default true). */
   frameRoute?: boolean;
-  /** Enable the flat no-WebGL fallback (default true). */
+  /** Enable the flat world fallback (default true). */
   fallback?: { enabled?: boolean };
+  /** Flat-world specifics (surface, sizes, plane, camera…). */
   flat?: FlatRouteMapOptions;
   /** Replace the bundled land mask. */
   land?: TopoLand;
   /**
    * Country border lines (default enabled, white).
-   * `color` applies to both modes; `opacity` is the globe line opacity,
+   * `color` applies to both worlds; `opacity` is the globe line opacity,
    * `width` the flat-map stroke width in px.
    */
   borders?: {
@@ -101,6 +124,37 @@ export interface RouteDotsRouteInfo {
 
 type EventHandler = (payload?: unknown) => void;
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' &&
+  value !== null &&
+  !Array.isArray(value) &&
+  Object.getPrototypeOf(value) === Object.prototype;
+
+/** Recursive merge for option objects (arrays and class instances replace). */
+function mergeOptions<T extends object>(base: T, patch: Partial<T>): T {
+  const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) continue;
+    const current = out[key];
+    out[key] =
+      isPlainObject(value) && isPlainObject(current)
+        ? mergeOptions(current, value as Record<string, unknown>)
+        : value;
+  }
+  return out as T;
+}
+
+/** Deep clone for option objects (used by `getOptions`). */
+function cloneOptions<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((entry) => cloneOptions(entry)) as unknown as T;
+  if (isPlainObject(value)) {
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) out[key] = cloneOptions(entry);
+    return out as T;
+  }
+  return value;
+}
+
 export class RouteDots {
   /** Default city dataset. */
   static readonly CITIES: readonly City[] = CITIES;
@@ -113,7 +167,8 @@ export class RouteDots {
   private cityMarkers: CityMarkersLayer | null = null;
   private flat: FlatRouteMap | null = null;
 
-  private readonly options: Required<Pick<RouteDotsOptions, 'theme'>> & RouteDotsOptions;
+  private options: RouteDotsOptions;
+  private palette: RouteDotsPalette;
   private readonly container: HTMLElement;
   private readonly handlers = new Map<string, Set<EventHandler>>();
   private route: RouteDotsRouteInfo | null = null;
@@ -122,16 +177,17 @@ export class RouteDots {
   constructor(container: HTMLElement, options: RouteDotsOptions = {}) {
     this.container = container;
     this.options = { theme: 'light', ...options };
+    this.palette = resolvePalette(this.options.theme ?? 'light', this.options.colors);
 
-    if (supportsWebGL()) {
+    if (this.wantsGlobe()) {
       this.mountWebGL();
-    } else if (this.options.fallback?.enabled !== false) {
+    } else if (this.options.fallback?.enabled !== false || this.options.world === 'flat') {
       this.mountFlat();
     } else {
       this.emit('error', new Error('RouteDots: WebGL unavailable and fallback disabled'));
       return;
     }
-    this.emit('ready', { mode: this._mode });
+    if (this._mode !== null) this.emit('ready', { mode: this._mode });
   }
 
   /** Active render mode ('webgl' | 'flat'), or null when mounting failed. */
@@ -139,7 +195,44 @@ export class RouteDots {
     return this._mode;
   }
 
-  /** Blinking airport-city markers (WebGL mode; null in flat mode). */
+  /** The palette in use (theme + `colors` merged). */
+  get activePalette(): RouteDotsPalette {
+    return { ...this.palette };
+  }
+
+  /** A deep copy of the merged options in use. */
+  getOptions(): RouteDotsOptions {
+    return cloneOptions(this.options);
+  }
+
+  /**
+   * The resolved route style in use — theme colours, lifts, **curve angles**,
+   * widths and dash patterns with all defaults applied (null before mount).
+   */
+  getRouteStyle(): ResolvedRouteStyle | null {
+    if (this._mode === 'webgl') return this.layer?.resolvedStyle ?? null;
+    if (this._mode === 'flat') return this.flat?.activeRouteStyle ?? null;
+    return null;
+  }
+
+  /** The resolved city dot + ripple style in use (null before mount). */
+  getCityStyle(): ResolvedCityMarkers | null {
+    if (this._mode === 'webgl') return this.cityMarkers?.resolvedStyle ?? null;
+    if (this._mode === 'flat') return this.flat?.activeCityStyle ?? null;
+    return null;
+  }
+
+  /** The resolved 3D-camera settings of the flat world (null in the 3D globe). */
+  getCamera3D(): ResolvedFlatCamera3D | null {
+    return this._mode === 'flat' ? (this.flat?.camera3d ?? null) : null;
+  }
+
+  /** The flat world instance (null in the 3D globe) — handy for demos/tests. */
+  getFlatMap(): FlatRouteMap | null {
+    return this.flat;
+  }
+
+  /** Blinking airport-city markers (3D world; null in flat mode). */
   getCityMarkers(): CityMarkersLayer | null {
     return this.cityMarkers;
   }
@@ -176,7 +269,13 @@ export class RouteDots {
       const spec = this.layer.setRoute(a, b, roundTrip);
       if (this.plane && this.options.plane?.enabled !== false) {
         const outbound = spec.arcs[0]!;
-        this.plane.setArc(outbound.from, outbound.to, outbound.lift, performance.now());
+        const style = this.layer.resolvedStyle.outbound;
+        this.plane.setArc(
+          outbound.from,
+          outbound.to,
+          { lift: style.lift, angle: style.angle },
+          performance.now(),
+        );
       }
       this.pins?.setPoints([
         { name: a.name, lat: a.lat, lng: a.lng },
@@ -202,41 +301,88 @@ export class RouteDots {
     if (this._mode === 'webgl' && this.globe) {
       this.globe.setAutoRotate(this.options.autoRotate?.enabled !== false);
     }
+    if (this._mode === 'flat') this.flat?.clearRoute();
     this.emit('route:cleared');
   }
 
-  /** Current camera view (WebGL mode only; null in flat mode). */
+  /** Current camera view (3D world only; null in flat mode). */
   getCameraState(): ViewState | null {
     if (this._mode !== 'webgl') return null;
     return this.globe?.getCameraState() ?? null;
   }
 
-  /** Animates the camera to a new view (WebGL mode only; a no-op in flat mode). */
+  /** Animates the camera to a new view (3D world only; a no-op in flat mode). */
   setView(view: ViewState, durationMs?: number): void {
     if (this._mode === 'webgl' && this.globe) {
       this.globe.setView(view, durationMs ?? 1200);
     }
   }
 
+  /**
+   * Restyles every colour of the scene live — globe or flat world, arcs,
+   * plane, city ripple and pins.
+   *
+   * ```ts
+   * rd.setColors({ outbound: '#0ea5e9', plane: '#0ea5e9', ocean: '#0b1220' });
+   * ```
+   */
+  setColors(colors: RouteDotsColors): void {
+    this.options.colors = { ...this.options.colors, ...colors };
+    this.palette = resolvePalette(this.options.theme ?? 'light', this.options.colors);
+    this.applyLive();
+  }
+
+  /**
+   * Removes every `colors` override, so the scene falls back to the palette of
+   * the active theme (`setColors` merges; this un-merges).
+   */
+  resetColors(): void {
+    if (this.disposed) return;
+    delete this.options.colors;
+    this.palette = resolvePalette(this.options.theme ?? 'light', undefined);
+    this.applyLive();
+  }
+
+  /**
+   * Merges new options into the live instance and applies them: colours,
+   * route styling, dashes, curve angles, city ripple, plane icon and the 3D
+   * camera all update in place. Structural options (`world`, `surface`,
+   * `theme`, `texture`, `land`) remount the renderer and re-draw the route.
+   */
+  setOptions(options: RouteDotsOptions): void {
+    if (this.disposed) return;
+    const previous = this.options;
+    this.options = mergeOptions(previous, options);
+    this.palette = resolvePalette(this.options.theme ?? 'light', this.options.colors);
+
+    const structural =
+      options.world !== undefined ||
+      options.surface !== undefined ||
+      options.theme !== undefined ||
+      options.texture !== undefined ||
+      options.land !== undefined ||
+      options.fallback !== undefined ||
+      options.flat?.surface !== undefined;
+    if (structural) {
+      this.remount();
+      return;
+    }
+    this.applyLive();
+  }
+
+  /** Switches the world ('auto' | 'globe' | 'flat') and re-draws the route. */
+  setWorld(world: WorldMode): void {
+    this.setOptions({ world });
+  }
+
   /** Switches the colour theme at runtime. */
   setTheme(theme: 'light' | 'dark'): void {
-    this.options.theme = theme;
-    if (this._mode === 'webgl' && this.globe) {
-      // Rebuilding the texture + materials is cheap enough for a theme switch.
-      this.unmountWebGL();
-      this.mountWebGL();
-      if (this.route)
-        this.setRoute(this.route.from, this.route.to, { roundTrip: this.route.roundTrip });
-    } else if (this._mode === 'flat' && this.flat) {
-      this.unmountFlat();
-      this.mountFlat();
-      if (this.route)
-        this.setRoute(this.route.from, this.route.to, { roundTrip: this.route.roundTrip });
-    }
+    this.setOptions({ theme });
   }
 
   resize(): void {
     if (this._mode === 'webgl' && this.globe) this.globe.resize();
+    if (this._mode === 'flat') this.flat?.reframe();
   }
 
   dispose(): void {
@@ -267,6 +413,144 @@ export class RouteDots {
         // listener errors must not break the render loop
       }
     }
+  }
+
+  /** True when the globe should be mounted (world option + WebGL probe). */
+  private wantsGlobe(): boolean {
+    if ((this.options.world ?? 'auto') === 'flat') return false;
+    return supportsWebGL();
+  }
+
+  /** Re-mounts the active world, preserving the route. */
+  private remount(): void {
+    const previousRoute = this.route;
+    const previousMode = this._mode;
+    if (this._mode === 'webgl') this.unmountWebGL();
+    if (this._mode === 'flat') this.unmountFlat();
+    this._mode = null;
+
+    if (this.wantsGlobe()) {
+      this.mountWebGL();
+    } else if (this.options.fallback?.enabled !== false || this.options.world === 'flat') {
+      this.mountFlat();
+    }
+    if (this._mode !== previousMode) {
+      this.emit('mode:changed', { from: previousMode, to: this._mode });
+    }
+    if (previousRoute) {
+      this.route = null;
+      this.setRoute(previousRoute.from, previousRoute.to, { roundTrip: previousRoute.roundTrip });
+    }
+  }
+
+  /** Applies the current options to the mounted world, in place. */
+  private applyLive(): void {
+    const o = this.options;
+    const palette = this.palette;
+
+    if (this._mode === 'webgl' && this.globe) {
+      this.globe.setColors(o.colors);
+      this.globe.setInteractive(o.interactive === true);
+      this.globe.setAutoRotate(o.autoRotate?.enabled !== false && this.route === null);
+      this.layer?.applyStyle({ ...o.route, theme: o.theme, colors: o.colors });
+      // The plane and the city markers can be switched on/off at runtime.
+      if (o.plane?.enabled === false) {
+        this.plane?.dispose();
+        this.plane = null;
+      } else if (!this.plane && this.globe) {
+        this.plane = this.createPlane();
+      }
+      this.plane?.applyStyle({
+        size: o.plane?.size,
+        color: o.plane?.color ?? palette.plane,
+        clearance: o.plane?.clearance,
+        flightMs: o.plane?.flightMs,
+        pauseMs: o.plane?.pauseMs,
+        startDelayMs: o.plane?.startDelayMs,
+        icon: o.plane?.icon,
+      });
+      if (o.cities?.enabled === false) {
+        this.cityMarkers?.dispose();
+        this.cityMarkers = null;
+      } else if (!this.cityMarkers && this.globe) {
+        this.cityMarkers = this.createCityMarkers();
+      } else if (this.cityMarkers) {
+        this.cityMarkers.applyStyle({
+          enabled: o.cities?.enabled,
+          color: o.cities?.color ?? palette.cities,
+          periodMs: o.cities?.periodMs,
+          dot: o.cities?.dot,
+          ripple: o.cities?.ripple,
+        });
+      }
+      this.pins?.setPalette({
+        background: palette.labelBackground,
+        label: palette.label,
+        dot: palette.marker,
+      });
+      return;
+    }
+
+    if (this._mode === 'flat' && this.flat) {
+      this.flat.applyStyle({
+        theme: o.theme ?? 'light',
+        colors: o.colors,
+        surface: o.flat?.surface ?? o.surface,
+        stepDeg: o.flat?.stepDeg ?? o.texture?.stepDeg,
+        land: o.land,
+        borders:
+          o.borders === undefined
+            ? undefined
+            : { enabled: o.borders.enabled, color: o.borders.color, width: o.borders.width },
+        route: o.route,
+        cities:
+          o.cities === undefined
+            ? undefined
+            : {
+                enabled: o.cities.enabled,
+                color: o.cities.color,
+                periodMs: o.cities.periodMs,
+                list: o.cities.list,
+                dot: o.cities.dot,
+                ripple: o.cities.ripple,
+              },
+        plane: {
+          ...o.flat?.plane,
+          ...o.plane,
+          color: o.plane?.color ?? o.flat?.plane?.color ?? palette.plane,
+        },
+        camera3d: { ...o.flat?.camera3d, ...o.camera3d },
+      });
+    }
+  }
+
+  /** Creates the plane layer from the current options. */
+  private createPlane(): PlaneLayer | null {
+    if (!this.globe) return null;
+    const o = this.options;
+    return new PlaneLayer(this.globe.globeGroup, {
+      size: o.plane?.size,
+      color: o.plane?.color ?? this.palette.plane,
+      clearance: o.plane?.clearance,
+      flightMs: o.plane?.flightMs,
+      pauseMs: o.plane?.pauseMs,
+      startDelayMs: o.plane?.startDelayMs,
+      icon: o.plane?.icon,
+    });
+  }
+
+  /** Creates the city marker layer from the current options. */
+  private createCityMarkers(): CityMarkersLayer | null {
+    if (!this.globe) return null;
+    const o = this.options;
+    return new CityMarkersLayer(this.globe.globeGroup, {
+      cities: o.cities?.list,
+      color: o.cities?.color ?? this.palette.cities,
+      periodMs: o.cities?.periodMs,
+      radius: o.cities?.radius,
+      dot: o.cities?.dot,
+      ripple: o.cities?.ripple,
+    });
   }
 
   /**
@@ -314,15 +598,12 @@ export class RouteDots {
       throw err;
     }
     this._mode = 'webgl';
+    this.palette = this.globe.palette;
 
     const layerOptions: RouteLayerOptions = {
+      ...o.route,
       theme: o.theme,
-      outboundLift: o.route?.outboundLift,
-      returnLift: o.route?.returnLift,
-      arcRadius: o.route?.arcRadius,
-      drawDurationMs: o.route?.drawDurationMs,
-      staggerMs: o.route?.staggerMs,
-      pulse: o.route?.pulse,
+      colors: o.colors,
     };
     this.layer = new RouteLayer(this.globe.globeGroup, layerOptions);
     this.layer.onDrawn(() => this.emit('route:drawn', this.getRoute()));
@@ -330,11 +611,12 @@ export class RouteDots {
     if (o.plane?.enabled !== false) {
       this.plane = new PlaneLayer(this.globe.globeGroup, {
         size: o.plane?.size,
-        color: o.plane?.color,
+        color: o.plane?.color ?? this.palette.plane,
         clearance: o.plane?.clearance,
         flightMs: o.plane?.flightMs,
         pauseMs: o.plane?.pauseMs,
         startDelayMs: o.plane?.startDelayMs,
+        icon: o.plane?.icon,
       });
     }
 
@@ -346,14 +628,15 @@ export class RouteDots {
         this.globe!.renderer.domElement.clientHeight,
       ],
       o.theme,
+      {
+        background: this.palette.labelBackground,
+        label: this.palette.label,
+        dot: this.palette.marker,
+      },
     );
 
     if (o.cities?.enabled !== false) {
-      this.cityMarkers = new CityMarkersLayer(this.globe.globeGroup, {
-        cities: o.cities?.list,
-        color: o.cities?.color ?? { ...GLOBE_THEMES[o.theme], ...o.colors }.cities,
-        periodMs: o.cities?.periodMs,
-      });
+      this.cityMarkers = this.createCityMarkers();
     }
 
     this.globe.onFrame((time, dtSec) => {
@@ -401,19 +684,30 @@ export class RouteDots {
     const o = this.options;
     const flatOptions: FlatRouteMapOptions = {
       theme: o.theme,
+      colors: o.colors,
       surface: o.flat?.surface ?? o.surface,
       stepDeg: o.flat?.stepDeg ?? o.texture?.stepDeg,
       width: o.flat?.width ?? 1600,
+      route: o.route,
+      plane: {
+        ...o.flat?.plane,
+        ...o.plane,
+        color: o.plane?.color ?? o.flat?.plane?.color ?? this.palette.plane,
+      },
       flightMs: o.flat?.flightMs ?? o.plane?.flightMs,
       pauseMs: o.flat?.pauseMs ?? o.plane?.pauseMs,
+      camera3d: { ...o.flat?.camera3d, ...o.camera3d },
       land: o.land,
       cities:
         o.cities === undefined
           ? undefined
           : {
               enabled: o.cities.enabled,
+              color: o.cities.color,
               periodMs: o.cities.periodMs,
               list: o.cities.list,
+              dot: o.cities.dot,
+              ripple: o.cities.ripple,
             },
       borders:
         o.borders === undefined
@@ -425,6 +719,7 @@ export class RouteDots {
             },
     };
     this.flat = new FlatRouteMap(this.container, flatOptions);
+    this.palette = this.flat.activePalette;
     this._mode = 'flat';
   }
 
@@ -434,5 +729,15 @@ export class RouteDots {
   }
 }
 
-// Re-export convenience theme tables
-export { GLOBE_THEMES };
+// Re-export convenience theme tables and palette helpers
+export { GLOBE_THEMES } from './globe/GlobeRenderer.js';
+export type { GlobeThemeColors } from './globe/GlobeRenderer.js';
+export {
+  PALETTES,
+  PALETTE_KEYS,
+  resolvePalette,
+  paletteToGlobeTheme,
+  paletteToRouteTheme,
+  paletteToFlatTheme,
+} from './theme.js';
+export type { RouteDotsPalette, RouteDotsColors, FlatTheme } from './theme.js';

@@ -189,6 +189,11 @@ export class CountrySurfaceLayer {
     parent.add(this.mesh);
   }
 
+  /** Restyles the country fill colour (theme switch / palette updates). */
+  setColor(color: string): void {
+    this.mesh.material.color.set(color);
+  }
+
   dispose(): void {
     this.mesh.removeFromParent();
     this.mesh.geometry.dispose();

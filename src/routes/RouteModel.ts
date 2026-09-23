@@ -5,8 +5,14 @@
  * Round trips produce two arcs with *different lifts* so the outbound and
  * return curves never overlap — each bulges a different amount, which is what
  * makes the "there and back" readable at a glance.
+ *
+ * Each arc also carries a **curve angle**: how far it is banked out of its
+ * great-circle plane (see `arcPath.ts`). Outbound and return are shaped
+ * independently, so a developer can curve one leg and keep the other a
+ * textbook geodesic.
  */
 import type { LatLon } from '../types.js';
+import { normalizeArcAngleDeg } from './arcPath.js';
 
 export type ArcId = 'outbound' | 'return';
 
@@ -16,6 +22,8 @@ export interface RouteArcSpec {
   to: LatLon;
   /** Arc lift as a fraction of the globe radius. */
   lift: number;
+  /** Curve angle in degrees — banks the arc out of its great-circle plane. */
+  angle: number;
   /** Draw order (0 first). */
   order: number;
 }
@@ -33,6 +41,10 @@ export interface BuildRouteOptions {
   outboundLift?: number;
   /** Return lift (default 0.20) — must differ from the outbound lift. */
   returnLift?: number;
+  /** Outbound curve angle in degrees (default 0 — a pure great circle). */
+  outboundAngle?: number;
+  /** Return curve angle in degrees (default 0). */
+  returnAngle?: number;
 }
 
 /** Default outbound lift. */
@@ -63,12 +75,21 @@ export function buildRoute(
   const roundTrip = options.roundTrip ?? false;
   const outboundLift = options.outboundLift ?? DEFAULT_OUTBOUND_LIFT;
   const returnLift = options.returnLift ?? DEFAULT_RETURN_LIFT;
+  const outboundAngle = normalizeArcAngleDeg(options.outboundAngle);
+  const returnAngle = normalizeArcAngleDeg(options.returnAngle);
 
   const arcs: RouteArcSpec[] = [
-    { id: 'outbound', from: origin, to: dest, lift: outboundLift, order: 0 },
+    { id: 'outbound', from: origin, to: dest, lift: outboundLift, angle: outboundAngle, order: 0 },
   ];
   if (roundTrip) {
-    arcs.push({ id: 'return', from: dest, to: origin, lift: returnLift, order: 1 });
+    arcs.push({
+      id: 'return',
+      from: dest,
+      to: origin,
+      lift: returnLift,
+      angle: returnAngle,
+      order: 1,
+    });
   }
   return { origin, dest, roundTrip, arcs };
 }

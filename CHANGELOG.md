@@ -129,6 +129,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   included). Dropped the tautological guard; `playwright.config.ts` is
   committed, so the e2e job always runs.
 
+### Added
+
+- **Making it yours** — one pass over everything a route visual is made of, so
+  a developer can restyle a RouteDots scene without touching internals. All of
+  it works at construction _and_ live:
+  - **One palette.** `src/theme.ts` defines a single `RouteDotsPalette`
+    (`ocean`, `countries`, `dots`, `borders`, `cities`, `atmosphere`,
+    `outbound`, `return`, `marker`, `ring`, `plane`, `label`,
+    `labelBackground`) from which the three renderer tables (`GLOBE_THEMES`,
+    `ROUTE_THEMES`, `FLAT_THEMES`) are derived, so they can never drift.
+    `colors` accepts any subset (legacy `globe` / `land` / `background`
+    aliases still work); `rd.setColors()` merges overrides live and the new
+    `rd.resetColors()` drops them again.
+  - **Plane icon component.** `PlaneIcon` (`src/routes/PlaneIcon.ts`)
+    normalises a preset (`'airliner' | 'jet' | 'arrow' | 'dot'`), raw SVG path
+    data (`{ path, viewBox }`), a raster image (`{ image }`) or a custom canvas
+    painter (`{ draw }`) into one component shared by the WebGL sprite and the
+    flat world's SVG (`icon`, `size`).
+  - **Customisable city ripple.** `src/markers/rippleStyle.ts` resolves the
+    solid dot (size, colour, dim) and the expanding ring (size, thickness,
+    colour, growth, peak opacity, period) into numbers both worlds share —
+    the globe's instanced shader and the flat world's CSS keyframes. New
+    `cities: { color, periodMs, radius, dot, ripple }` option.
+  - **Customisable dashes.** `src/routes/routeStyle.ts` resolves per-leg
+    colour, opacity, lift, curve angle, width and dash pattern (colour, length,
+    gap, speed, width, `enabled: false` for a solid line) once, into shader
+    uniforms (globe) and `stroke-dasharray` px (flat). Legacy
+    `outboundLift` / `returnLift` / `arcRadius` keys keep working.
+  - **Customisable curve angle.** `src/routes/arcPath.ts` banks each arc out
+    of its great-circle plane about the chord, ±85°
+    (`route: { outbound: { angle: 30 }, return: { angle: -30 } }`): the two
+    legs of a round trip bend independently and both endpoints stay put. The
+    tube, the plane and the flat world's quadratic arcs all follow the same
+    curve.
+  - **3D world or flat world, your call.** `world: 'auto' | 'globe' | 'flat'`
+    (plus `rd.setWorld()`) picks the renderer; and the flat map can now be a
+    real 3D scene via `camera3d` (`src/flat/camera3d.ts`): CSS perspective,
+    tilt/yaw orbit (drag), wheel zoom, `translateZ` depth layers for border /
+    city / route layers (genuine parallax) and an eased follow chase. New
+    `rd.getCamera3D()`, `rd.getRouteStyle()`, `rd.getCityStyle()`,
+    `rd.getFlatMap()`, `rd.getOptions()` accessors.
+  - **Live updates.** `rd.setOptions()` re-applies colours, route styling,
+    dashes, angles, city ripple, plane icon and the flat camera in place —
+    without restarting the draw-on animation — and remounts only when the
+    world itself changes.
+  - **Showcase.** `examples/showcase/index.html` gained a customization studio
+    (🎛 button) that drives every option above through the public API, with a
+    live snippet of the equivalent call, and reset-to-defaults.
+  - Unit tests for the palette, the banked-arc maths, the dash/style
+    resolution, `PlaneIcon`, the ripple resolution and the flat camera; new
+    `e2e/customize.spec.ts` + fixture and a showcase-studio E2E.
+
+### Changed
+
+- `RouteLayer`, `PlaneLayer`, `GlobeRenderer`, `BordersLayer`,
+  `CityMarkersLayer`, `countrySurface`, `EndpointLabels` and `FlatRouteMap`
+  now take their colours from the shared palette and expose live restyling
+  (`setColors` / `applyStyle` / `setPalette`) instead of owning private theme
+  tables; `EndpointLabels` themes through CSS custom properties
+  (`--rd-pin-bg`, `--rd-pin-fg`, `--rd-pin-dot`, `--rd-pin-stem`, `--rd-pin-ring`).
+- The flat world's wheel zoom follows the usual convention (scrolling up zooms
+  in).
+
+### Fixed
+
+- Flat world: `camera3d.viewport` emitted `perspective(1400px)` into
+  `style.perspective`, an invalid CSS value, so the 3D camera's perspective was
+  never applied — it now emits the bare length (`1400px`).
+- Flat world: live `camera3d` updates (via `setOptions`) re-resolved the camera
+  but left the previous transform in the DOM; the transforms are now pushed
+  after re-resolving.
+- Flat world: the plane's frame loop assumed `SVGPathElement.getTotalLength`
+  exists (it does not in jsdom-style environments) and threw every frame; it
+  now hides the plane instead.
+- Flat world: mounting into a full-bleed hero (`position: absolute; inset: 0`)
+  collapsed the container to zero height, because the map forced
+  `position: relative` onto its host — which turns `inset: 0` into offsets that
+  no longer stretch it. The map now only sets `position: relative` when the
+  host's computed position is `static`, so absolute/fixed/relative layouts are
+  left exactly as the developer wrote them (found by the showcase's orbit
+  drag E2E, which was landing on the page header because the map had no
+  height).
+
 ## [0.1.0] - 2026-09-22
 
 ### Added

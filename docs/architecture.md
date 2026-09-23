@@ -16,9 +16,10 @@
 
 ```
 src/
-├── types.ts                  LatLon, City
+├── types.ts                  LatLon, City, WorldMode
 ├── cities.ts                 Default city dataset + resolveCity()
-├── RouteDots.ts              Public facade: mode selection, routing, events
+├── theme.ts                  One palette → GLOBE/ROUTE/FLAT theme tables
+├── RouteDots.ts              Public facade: mode selection, routing, live styling, events
 ├── core/
 │   ├── topojson.ts           Minimal TopoJSON decoder → PolygonRings
 │   ├── antimeridian.ts       Seam-safe ring splitting (unwrap + clip) — pure
@@ -32,9 +33,15 @@ src/
 │   ├── dotTexture.ts         Dot-lattice → equirectangular canvas texture
 │   ├── atmosphere.ts         Fresnel rim glow shader
 │   └── GlobeRenderer.ts      Scene/camera/RAF loop, resize, interaction
+├── markers/
+│   ├── blinkPattern.ts       Ripple curve + phase offsets — pure
+│   └── rippleStyle.ts        Resolve dots + ripple for both worlds — pure
 ├── routes/                   Route layer
-│   ├── RouteModel.ts         buildRoute: arc specs (lifts, order) — pure
-│   ├── GreatCircleCurve.ts   three.js Curve for TubeGeometry
+│   ├── RouteModel.ts         buildRoute: arc specs (lifts, angles, order) — pure
+│   ├── arcPath.ts            Banked great-circle arc maths (arcPoint) — pure
+│   ├── routeStyle.ts         Resolve colours/lifts/angles/dashes — pure
+│   ├── PlaneIcon.ts          Icon component: presets, SVG path, image, draw()
+│   ├── GreatCircleCurve.ts   three.js Curve for TubeGeometry (lift + angle)
 │   ├── routeShader.ts        Arc tube GLSL (draw-on, dashes, fades)
 │   ├── RouteLayer.ts         Tubes, markers, pulses; update(time)
 │   ├── PlaneScheduler.ts     Flight/pause/repeat timing — pure
@@ -42,8 +49,11 @@ src/
 │   ├── PlaneLayer.ts         Sprite following the outbound arc
 │   └── EndpointLabels.ts     DOM pin badges + projection (projectPin, pure)
 ├── flat/
+│   ├── layers.ts             Layer names/attributes of the flat DOM stack
 │   ├── countryPaths.ts       Country polygons → SVG path data (pure)
-│   └── FlatRouteMap.ts       No-WebGL fallback (canvas fills + SVG routes)
+│   ├── routePath.ts          Quadratic arcs + framing bounds — pure
+│   ├── camera3d.ts           3D camera maths: transforms, zoom, follow — pure
+│   └── FlatRouteMap.ts       Flat world (canvas fills + SVG routes + 3D camera)
 └── data/
     └── land-110m.ts          Bundled world land mask (world-atlas, generated)
 ```
@@ -104,8 +114,21 @@ The dot lattice stays available as `surface: 'dots'`.
   midpoint (the airline-map "bulge").
 - Round trips: `outboundLift` 0.10 vs `returnLift` 0.20. Same great circle,
   different lift ⇒ two non-overlapping curves that read as "there and back".
+- **Curve angle.** `arcPoint(from, to, lift, angle)` banks the whole arc about
+  its chord: the lifted point is rotated by `angle` around the chord axis
+  (Rodrigues), so `t = 0` / `t = 1` are untouched — endpoints stay exactly on
+  the surface — while the apex swings sideways by up to ±85°. Each leg has its
+  own angle, so a round trip's arcs can be leaned independently. Both worlds
+  fly the same geometry: `GreatCircleCurve` for the tube, `PlaneLayer.setArc`
+  for the plane, `flat/routePath.ts` (a quadratic Bézier whose control point is
+  rotated out of the perpendicular by the same angle) for the flat map.
 - `GreatCircleCurve` evaluates the same math directly (no sampled arrays) and
   feeds `TubeGeometry(128 segments, radius 0.0015)`.
+- `routeStyle.ts` turns `route` options + the palette into concrete per-leg
+  styles (colour, opacity, lift, angle, width, dash). The dash is expressed as
+  fractions of the whole route, which is what lets one definition drive the
+  globe's shader uniforms (`uDashCount`, `uDashSolid`, `uFlow`) and the flat
+  map's `stroke-dasharray` px identically.
 
 ## Endpoint pin badges
 
@@ -175,23 +198,34 @@ the arcs overlap — pulses 3, plane sprite 4. The shared route shader adds a
 soft limb fade near the globe's visible edge so arcs melt into the surface
 instead of hard-clipping at the silhouette.
 
-## Flat fallback
+## Flat world
 
 `FlatRouteMap` is a self-contained DOM component: a canvas with the same dot
 lattice (equirectangular), an SVG overlay (two quadratic-Bézier dashed routes
-— outbound up, return down — plus endpoint markers), and a plane moved along
-`getPointAtLength`. A stage div with an explicit pixel size keeps canvas,
-SVG-viewBox and framing math in one coordinate space; `frameRoute` pans/zooms
-it (CSS transform, 700 ms ease-out) to centre the route.
+— outbound up, return down — plus endpoint markers, labels and the plane), and
+a plane moved along `getPointAtLength`. A stage div with an explicit pixel size
+keeps canvas, SVG-viewBox and framing math in one coordinate space;
+`frameRoute` pans/zooms it (CSS transform, 700 ms ease-out) to centre the
+route.
+
+The DOM is a four-level chain — container → viewport → world → stage — so the
+**3D camera effect** (`camera3d`) is a pure styling concern: the container gets
+a CSS `perspective`, the world a `rotateX(tilt) rotateZ(yaw)`, and the layer
+SVGs `translateZ(depth)` (routes + plane), `· 0.55` (cities) and `· 0.3`
+(borders) — real parallax, since the same map is still drawn flat underneath.
+Dragging orbits (0.3°/px, clamped), the wheel zooms (`zoomStep`, 0.35×–6×) and
+the chase eases the view centre whenever the plane leaves the safe area
+(`followCentre`), all pure functions in `flat/camera3d.ts`.
 
 ## Testing strategy
 
-| Layer                                           | How it's tested                                                                                                                        |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Core geo (slerp, distances, raster, dots)       | Vitest unit tests with independent references (haversine, known land/ocean points, synthetic polygons)                                 |
-| Camera rig, schedulers, route model, silhouette | Vitest unit tests (pure, deterministic)                                                                                                |
-| WebGL rendering, shaders, sprite, showcase      | Playwright (headless Chromium): pixel sampling, camera tween landing, draw-on completion, plane monotonic progress, form-driven routes |
-| Flat fallback                                   | Playwright: DOM structure + animated plane transform                                                                                   |
+| Layer                                                 | How it's tested                                                                                                                                                    |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Core geo (slerp, distances, raster, dots)             | Vitest unit tests with independent references (haversine, known land/ocean points, synthetic polygons)                                                             |
+| Camera rig, schedulers, route model, silhouette       | Vitest unit tests (pure, deterministic)                                                                                                                            |
+| WebGL rendering, shaders, sprite, showcase            | Playwright (headless Chromium): pixel sampling, camera tween landing, draw-on completion, plane monotonic progress, form-driven routes                             |
+| Flat fallback / flat world                            | Playwright: DOM structure, layer stack, dashes, ripple keyframes, animated plane transform, 3D camera transforms                                                   |
+| Customisation (palette, angles, dashes, icon, camera) | Vitest: resolve/geometry maths. Playwright: `e2e/customize.spec.ts` (colours, dash px, banked arcs, ripples, 3D camera, live updates) and the showcase-studio spec |
 
 CI (`.github/workflows/ci.yml`): format → lint → typecheck → unit tests →
 build → Playwright (chromium).

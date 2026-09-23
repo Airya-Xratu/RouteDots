@@ -18,6 +18,8 @@
   "include": [
     "src",
     "examples",
+    "e2e",
+    "tools",
     "tsup.config.ts",
     "tsup.browser.config.ts",
     "vitest.config.ts",

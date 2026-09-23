@@ -1,10 +1,11 @@
 /**
  * RouteLayer — renders the flight route on top of the globe:
  *
- * - one tube per arc (outbound + optional return) with distinct lifts so the
- *   two curves never conflict,
+ * - one tube per arc (outbound + optional return) with distinct lifts (and
+ *   optional curve angles) so the two curves never conflict,
  * - a draw-on animation (origin → destination) with a stagger for the return,
- * - flowing dashes whose direction matches the arc's travel direction,
+ * - flowing dashes whose direction matches the arc's travel direction, fully
+ *   customisable per path (colour, length, gap, width, speed),
  * - endpoint markers with a one-shot pulse ring when a route is set.
  *
  * The layer is driven by the renderer's frame loop via `update(time)`.
@@ -12,17 +13,18 @@
 import * as THREE from 'three';
 import { latLngToVec } from '../core/greatCircle.js';
 import { LAYER_RADIUS } from '../globe/layerRadii.js';
+import { PALETTES, paletteToRouteTheme, resolvePalette, type RouteDotsColors } from '../theme.js';
 import type { LatLon } from '../types.js';
-import {
-  DEFAULT_ARC_RADIUS,
-  DEFAULT_OUTBOUND_LIFT,
-  DEFAULT_RETURN_LIFT,
-  buildRoute,
-  type RouteArcSpec,
-  type RouteSpec,
-} from './RouteModel.js';
+import { buildRoute, type RouteArcSpec, type RouteSpec } from './RouteModel.js';
 import { GreatCircleCurve } from './GreatCircleCurve.js';
 import { ROUTE_FRAGMENT, ROUTE_VERTEX } from './routeShader.js';
+import {
+  dashUniforms,
+  resolveRouteStyle,
+  type ResolvedPathStyle,
+  type ResolvedRouteStyle,
+  type RouteStyleOptions,
+} from './routeStyle.js';
 
 export interface RouteLayerTheme {
   outbound: { color: string; opacity: number };
@@ -31,39 +33,24 @@ export interface RouteLayerTheme {
   ring: string;
 }
 
+/** Theme tables, derived from the RouteDots palette. */
 export const ROUTE_THEMES: Record<'light' | 'dark', RouteLayerTheme> = {
-  light: {
-    outbound: { color: '#4f5b6b', opacity: 0.95 },
-    return: { color: '#8a94a6', opacity: 0.8 },
-    marker: '#23262e',
-    ring: '#23262e',
-  },
-  dark: {
-    outbound: { color: '#cfd8e6', opacity: 0.95 },
-    return: { color: '#7c8798', opacity: 0.75 },
-    marker: '#e2e8f0',
-    ring: '#e2e8f0',
-  },
+  light: paletteToRouteTheme(PALETTES.light),
+  dark: paletteToRouteTheme(PALETTES.dark),
 };
 
-export interface RouteLayerOptions {
+/** Everything the route layer needs: styling plus theme/colour overrides. */
+export interface RouteLayerOptions extends RouteStyleOptions {
   theme?: 'light' | 'dark';
-  /** Outbound lift (default 0.10). */
-  outboundLift?: number;
-  /** Return lift (default 0.20). */
-  returnLift?: number;
-  /** Arc tube radius in globe units (default 0.0015). */
-  arcRadius?: number;
-  /** Duration of the draw-on animation per arc (ms, default 1100). */
-  drawDurationMs?: number;
-  /** Delay between starting the outbound and the return draw (ms, default 350). */
-  staggerMs?: number;
-  /** Pulse rings on route change (default true). */
-  pulse?: boolean;
+  /** Palette overrides — the same object as the `colors` option. */
+  colors?: RouteDotsColors;
+  /** Pre-resolved styles (skips resolving `route` options again). */
+  style?: ResolvedRouteStyle;
 }
 
 interface ArcObject {
   spec: RouteArcSpec;
+  style: ResolvedPathStyle;
   mesh: THREE.Mesh<THREE.TubeGeometry, THREE.ShaderMaterial>;
 }
 
@@ -77,37 +64,35 @@ const easeOutCubic = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t))
 export class RouteLayer {
   readonly group: THREE.Group;
 
-  private readonly theme: RouteLayerTheme;
-  private readonly options: Required<Omit<RouteLayerOptions, 'theme'>> & {
-    theme: 'light' | 'dark';
-  };
+  private options: RouteLayerOptions;
+  private style: ResolvedRouteStyle;
+  private theme: RouteLayerTheme;
 
   private arcs: ArcObject[] = [];
   private markers: THREE.Object3D[] = [];
   private pulses: Pulse[] = [];
   private drawStart: number | null = null;
   private route: RouteSpec | null = null;
+  private lastRoute: { origin: LatLon; dest: LatLon; roundTrip: boolean } | null = null;
   private lastTime: number | null = null;
   private onDrawnCallback: (() => void) | null = null;
 
   constructor(parent: THREE.Object3D, options: RouteLayerOptions = {}) {
     const theme = options.theme ?? 'light';
     this.theme = ROUTE_THEMES[theme];
-    this.options = {
-      theme,
-      outboundLift: options.outboundLift ?? DEFAULT_OUTBOUND_LIFT,
-      returnLift: options.returnLift ?? DEFAULT_RETURN_LIFT,
-      arcRadius: options.arcRadius ?? DEFAULT_ARC_RADIUS,
-      drawDurationMs: options.drawDurationMs ?? 1100,
-      staggerMs: options.staggerMs ?? 350,
-      pulse: options.pulse ?? true,
-    };
+    this.options = { ...options, theme };
+    this.style = options.style ?? resolveRouteStyle(theme, options, options.colors);
     this.group = new THREE.Group();
     parent.add(this.group);
   }
 
   get currentRoute(): RouteSpec | null {
     return this.route ? { ...this.route } : null;
+  }
+
+  /** The resolved style currently in use (colours, lifts, angles, dashes). */
+  get resolvedStyle(): ResolvedRouteStyle {
+    return this.style;
   }
 
   /** Called once the route has fully drawn (both arcs). */
@@ -119,20 +104,57 @@ export class RouteLayer {
   setRoute(origin: LatLon, dest: LatLon, roundTrip = false): RouteSpec {
     const spec = buildRoute(origin, dest, {
       roundTrip,
-      outboundLift: this.options.outboundLift,
-      returnLift: this.options.returnLift,
+      outboundLift: this.style.outbound.lift,
+      returnLift: this.style.return.lift,
+      outboundAngle: this.style.outbound.angle,
+      returnAngle: this.style.return.angle,
     });
     this.clearArcs();
     this.route = spec;
+    this.lastRoute = { origin, dest, roundTrip };
     this.drawStart = null;
     this.lastTime = null;
 
     for (const arcSpec of spec.arcs) {
-      this.arcs.push(this.buildArc(arcSpec));
+      this.arcs.push(this.buildArc(arcSpec, this.styleFor(arcSpec), 0));
     }
     this.buildMarkers(origin, dest);
-    if (this.options.pulse) this.spawnPulses(origin, dest);
+    if (this.style.pulse) this.spawnPulses(origin, dest);
     return spec;
+  }
+
+  /**
+   * Restyles the layer in place (theme switch, colour pickers, dash sliders…).
+   *
+   * The current route is rebuilt with the new geometry, and every arc keeps
+   * the draw-on progress it had, so live styling never re-plays the animation.
+   */
+  applyStyle(options: Partial<RouteLayerOptions>): ResolvedRouteStyle {
+    const theme = options.theme ?? this.options.theme ?? 'light';
+    const merged: RouteLayerOptions = { ...this.options, ...options, theme };
+    this.options = merged;
+    this.theme = paletteToRouteTheme(resolvePalette(theme, merged.colors));
+    this.style = merged.style ?? resolveRouteStyle(theme, merged, merged.colors);
+
+    if (this.lastRoute) {
+      const progress = this.arcs.map((arc) => arcProgress(arc));
+      const pulses = this.pulses.length > 0 && this.style.pulse;
+      const spec = buildRoute(this.lastRoute.origin, this.lastRoute.dest, {
+        roundTrip: this.lastRoute.roundTrip,
+        outboundLift: this.style.outbound.lift,
+        returnLift: this.style.return.lift,
+        outboundAngle: this.style.outbound.angle,
+        returnAngle: this.style.return.angle,
+      });
+      this.clearArcs();
+      this.route = spec;
+      for (const [index, arcSpec] of spec.arcs.entries()) {
+        this.arcs.push(this.buildArc(arcSpec, this.styleFor(arcSpec), progress[index] ?? 0));
+      }
+      this.buildMarkers(this.lastRoute.origin, this.lastRoute.dest);
+      if (pulses) this.spawnPulses(this.lastRoute.origin, this.lastRoute.dest);
+    }
+    return this.style;
   }
 
   /** Advances all animations. `time` is the frame timestamp (ms). */
@@ -147,9 +169,9 @@ export class RouteLayer {
     let allDone = true;
 
     for (const arc of this.arcs) {
-      const delay = arc.spec.order * this.options.staggerMs;
+      const delay = arc.spec.order * this.style.staggerMs;
       const local = elapsed - delay;
-      const t = local <= 0 ? 0 : Math.min(1, local / this.options.drawDurationMs);
+      const t = local <= 0 ? 0 : Math.min(1, local / this.style.drawDurationMs);
       const uniforms = arc.mesh.material.uniforms;
       if (uniforms.uProgress && uniforms.uTime) {
         uniforms.uProgress.value = easeOutCubic(t);
@@ -181,6 +203,7 @@ export class RouteLayer {
   clear(): void {
     this.clearArcs();
     this.route = null;
+    this.lastRoute = null;
     this.onDrawnCallback = null;
   }
 
@@ -189,34 +212,37 @@ export class RouteLayer {
     this.group.removeFromParent();
   }
 
-  private buildArc(spec: RouteArcSpec): ArcObject {
-    const curve = new GreatCircleCurve(spec.from, spec.to, spec.lift);
-    const radius = spec.id === 'outbound' ? this.options.arcRadius : this.options.arcRadius * 0.8;
-    const geometry = new THREE.TubeGeometry(curve, 128, radius, 8, false);
-    const colors = spec.id === 'outbound' ? this.theme.outbound : this.theme.return;
+  private styleFor(spec: RouteArcSpec): ResolvedPathStyle {
+    return spec.id === 'outbound' ? this.style.outbound : this.style.return;
+  }
+
+  private buildArc(spec: RouteArcSpec, style: ResolvedPathStyle, progress = 0): ArcObject {
+    const curve = new GreatCircleCurve(spec.from, spec.to, spec.lift, spec.angle);
+    const geometry = new THREE.TubeGeometry(curve, 128, style.width, 8, false);
+    const dash = style.dash ? dashUniforms(style.dash) : null;
     const material = new THREE.ShaderMaterial({
       vertexShader: ROUTE_VERTEX,
       fragmentShader: ROUTE_FRAGMENT,
       transparent: true,
       depthWrite: false,
       uniforms: {
-        uColor: { value: new THREE.Color(colors.color) },
-        uOpacity: { value: colors.opacity },
-        uProgress: { value: 0 },
+        uColor: { value: new THREE.Color(style.dash?.color ?? style.color) },
+        uOpacity: { value: style.opacity },
+        uProgress: { value: progress },
         uTime: { value: 0 },
-        uDashCount: { value: spec.id === 'outbound' ? 14 : 18 },
-        uDashSolid: { value: spec.id === 'outbound' ? 0.55 : 0.45 },
-        uFlow: { value: spec.id === 'outbound' ? 0.35 : 0.22 },
+        uDashCount: { value: dash?.dashCount ?? 1 },
+        uDashSolid: { value: dash?.dashSolid ?? 1 },
+        uFlow: { value: dash?.flow ?? 0 },
       },
     });
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.visible = false;
+    mesh.visible = progress > 0;
     // Depth-independent painter layering: the return arc always draws above
     // the outbound (order 1 / 2), pulses (3) and the plane (4) above both —
     // "there and back" stays readable even where the arcs overlap.
     mesh.renderOrder = 1 + spec.order;
     this.group.add(mesh);
-    return { spec, mesh };
+    return { spec, style, mesh };
   }
 
   private buildMarkers(origin: LatLon, dest: LatLon): void {
@@ -282,4 +308,10 @@ export class RouteLayer {
     for (const g of geometries) g.dispose();
     for (const m of materials) m.dispose();
   }
+}
+
+/** Current draw-on progress of an arc (0 when it has not started). */
+function arcProgress(arc: ArcObject): number {
+  const value = arc.mesh.material.uniforms.uProgress?.value;
+  return typeof value === 'number' ? value : 0;
 }
