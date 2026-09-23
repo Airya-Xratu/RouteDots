@@ -85,7 +85,7 @@ export function resolveFlatCamera3D(options: FlatCamera3DOptions = {}): Resolved
 
 /** Where a camera value goes: styles for the DOM, or the plane's depth. */
 export interface FlatCamera3DTransforms {
-  /** `perspective` for the viewport element. */
+  /** The `perspective` **length** for the viewport element ('' when off). */
   viewport: string;
   /** `--rd-perspective` etc., for reference/documentation. */
   perspectivePx: number;
@@ -112,7 +112,9 @@ export function flatCamera3DTransforms(camera: ResolvedFlatCamera3D): FlatCamera
     };
   }
   return {
-    viewport: `perspective(${camera.perspective}px)`,
+    // A bare length: it is assigned to `style.perspective` (a CSS function
+    // like `perspective(1400px)` is not a valid value for that property).
+    viewport: `${camera.perspective}px`,
     perspectivePx: camera.perspective,
     world: `rotateX(${camera.tilt.toFixed(2)}deg) rotateZ(${camera.yaw.toFixed(2)}deg)`,
     routeLayer: `translateZ(${camera.depth.toFixed(2)}px)`,
@@ -130,9 +132,12 @@ export function easeFactor(k: number, dtSec: number): number {
 /** Zoom limits for the flat world's camera. */
 export const ZOOM_LIMITS = { min: 0.35, max: 6 } as const;
 
-/** One zoom step of the wheel (`deltaY` sign). */
+/**
+ * One zoom step of the wheel: scrolling up (negative `deltaY`, as every map
+ * does it) zooms in, scrolling down zooms out.
+ */
 export function zoomStep(scale: number, deltaY: number, step = 0.09): number {
-  const factor = 1 + Math.sign(deltaY) * step;
+  const factor = 1 - Math.sign(deltaY) * step;
   return clamp(scale * factor, ZOOM_LIMITS.min, ZOOM_LIMITS.max);
 }
 

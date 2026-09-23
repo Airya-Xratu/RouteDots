@@ -35,7 +35,18 @@ and a flat 2D fallback for browsers without WebGL.
   back; the `borders` option restyles or switches the lines off.
 - 🪶 **One dependency, offline data.** Built on `three.js`; the 110m world
   land mask (Natural Earth, public domain) is bundled — no tiles, no API keys.
-- 🧯 **Graceful degradation.** Without WebGL you get the same dot map in 2D
+- 🎨 **Yours to style.** One palette covers every colour — ocean, countries,
+  borders, arcs, cities, plane, pins — and every shape is configurable: the
+  plane's icon (a preset, SVG path, image or custom canvas painter), the city
+  ripple's size / thickness / growth / period, the dash pattern's length, gap,
+  speed and thickness, and each leg's curve angle (±85°, so a round trip can
+  lean as far apart as you like). Call `rd.setOptions()` / `rd.setColors()` to
+  restyle a live scene without restarting the animation.
+- 🌐 **3D globe or flat map — your call.** `world: 'auto' | 'globe' | 'flat'`
+  picks the renderer, and the flat map can itself be a 3D scene
+  (`camera3d`): CSS perspective, drag-to-orbit, wheel zoom and depth layers
+  that float the routes and the plane above the geography.
+- 🧯 **Graceful degradation.** Without WebGL you get the same flat map in 2D
   with curved SVG routes and an animated plane. Same API, no breakage.
 
 ## Quick start
@@ -79,14 +90,17 @@ static server once built: [`examples/showcase/index.html`](./examples/showcase/i
 
 ## API in 30 seconds
 
-|                                        |                                                                                                                                                                                 |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `new RouteDots(container, options?)`   | Mounts the globe (or flat fallback). Options: `theme`, `view`, `autoRotate`, `interactive`, `texture`, `route` (lifts, draw timing), `plane`, `frameRoute`, `fallback`, `land`… |
-| `rd.setRoute(from, to, { roundTrip })` | Draws the route + pans the camera to frame it. Returns `false` for invalid pairs.                                                                                               |
-| `rd.getRoute()` / `rd.clearRoute()`    | Inspect / remove the current route.                                                                                                                                             |
-| `rd.setTheme('light' \| 'dark')`       | Live theme switch.                                                                                                                                                              |
-| `rd.on('route:drawn', cb)`             | Events: `ready`, `route:updated`, `route:drawn`, `route:invalid`, `route:cleared`, `mode:changed`.                                                                              |
-| `rd.dispose()`                         | Tear down.                                                                                                                                                                      |
+|                                           |                                                                                                                                                                                                                                                                                                                              |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `new RouteDots(container, options?)`      | Mounts the globe or the flat world. Options: `theme`, `colors`, `world`, `view`, `autoRotate`, `surface`, `borders`, `route` (colours, lifts, **curve angles**, dashes, draw timing), `cities` (dot + **ripple**), `plane` (**icon** component, size, colour, timing), `camera3d`, `frameRoute`, `fallback`, `flat`, `land`… |
+| `rd.setRoute(from, to, { roundTrip })`    | Draws the route + pans the camera to frame it. Returns `false` for invalid pairs.                                                                                                                                                                                                                                            |
+| `rd.getRoute()` / `rd.clearRoute()`       | Inspect / remove the current route.                                                                                                                                                                                                                                                                                          |
+| `rd.setTheme('light' \| 'dark')`          | Live theme switch.                                                                                                                                                                                                                                                                                                           |
+| `rd.setColors(colors)`                    | Restyle everything live (`rd.resetColors()` drops the overrides).                                                                                                                                                                                                                                                            |
+| `rd.setOptions(options)`                  | Apply any option live — dashes, angles, ripple, icon, camera; `rd.setWorld('flat')` switches renderer.                                                                                                                                                                                                                       |
+| `rd.getRouteStyle()` / `rd.getCamera3D()` | The resolved numbers behind what you see (handy in tests).                                                                                                                                                                                                                                                                   |
+| `rd.on('route:drawn', cb)`                | Events: `ready`, `route:updated`, `route:drawn`, `route:invalid`, `route:cleared`, `mode:changed`.                                                                                                                                                                                                                           |
+| `rd.dispose()`                            | Tear down.                                                                                                                                                                                                                                                                                                                   |
 
 Full reference: [docs/developer-guide.md](./docs/developer-guide.md).
 

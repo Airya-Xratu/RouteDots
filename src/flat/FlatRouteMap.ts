@@ -376,6 +376,10 @@ export class FlatRouteMap {
       this.applyPlaneOptions();
     }
     if (options.camera3d !== undefined) {
+      // Re-resolve before pushing the transforms: the merged options are in
+      // `this.options` already, but the resolved camera still holds the old
+      // numbers.
+      this.camera = resolveFlatCamera3D(this.options.camera3d);
       this.applyCamera();
     }
     if (
@@ -759,9 +763,17 @@ export class FlatRouteMap {
       this.planeGroup.style.display = 'none';
       return;
     }
-    const length = this.outboundPath.getTotalLength();
-    const pt = this.outboundPath.getPointAtLength(t * length);
-    const ahead = this.outboundPath.getPointAtLength(Math.min(length, t * length + 2));
+    // Path measuring is a browser-only API (there is none in jsdom-style
+    // environments): without it the plane simply hides.
+    const measure = this.outboundPath.getTotalLength;
+    if (typeof measure !== 'function') {
+      this.planeGroup.style.display = 'none';
+      return;
+    }
+    const length = measure.call(this.outboundPath);
+    const at = (distance: number) => this.outboundPath!.getPointAtLength(distance);
+    const pt = at(t * length);
+    const ahead = at(Math.min(length, t * length + 2));
     const angle = (Math.atan2(ahead.y - pt.y, ahead.x - pt.x) * 180) / Math.PI + 90;
     this.planeGroup.style.display = '';
     this.planeGroup.setAttribute(

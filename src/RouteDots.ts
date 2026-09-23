@@ -29,10 +29,10 @@ import { PlaneLayer, type PlaneLayerOptions } from './routes/PlaneLayer.js';
 import { trackCamera } from './routes/cameraTracking.js';
 import { EndpointLabels } from './routes/EndpointLabels.js';
 import { CityMarkersLayer } from './globe/CityMarkersLayer.js';
-import type { RouteStyleOptions } from './routes/routeStyle.js';
+import type { ResolvedRouteStyle, RouteStyleOptions } from './routes/routeStyle.js';
 import { FlatRouteMap, type FlatRouteMapOptions } from './flat/FlatRouteMap.js';
-import type { FlatCamera3DOptions } from './flat/camera3d.js';
-import type { CityMarkersOptions } from './markers/rippleStyle.js';
+import type { FlatCamera3DOptions, ResolvedFlatCamera3D } from './flat/camera3d.js';
+import type { CityMarkersOptions, ResolvedCityMarkers } from './markers/rippleStyle.js';
 import { angularDistance, DEG, greatCircleMidpoint } from './core/greatCircle.js';
 import type { TopoLand } from './core/topojson.js';
 import { resolvePalette, type RouteDotsColors, type RouteDotsPalette } from './theme.js';
@@ -205,6 +205,33 @@ export class RouteDots {
     return cloneOptions(this.options);
   }
 
+  /**
+   * The resolved route style in use — theme colours, lifts, **curve angles**,
+   * widths and dash patterns with all defaults applied (null before mount).
+   */
+  getRouteStyle(): ResolvedRouteStyle | null {
+    if (this._mode === 'webgl') return this.layer?.resolvedStyle ?? null;
+    if (this._mode === 'flat') return this.flat?.activeRouteStyle ?? null;
+    return null;
+  }
+
+  /** The resolved city dot + ripple style in use (null before mount). */
+  getCityStyle(): ResolvedCityMarkers | null {
+    if (this._mode === 'webgl') return this.cityMarkers?.resolvedStyle ?? null;
+    if (this._mode === 'flat') return this.flat?.activeCityStyle ?? null;
+    return null;
+  }
+
+  /** The resolved 3D-camera settings of the flat world (null in the 3D globe). */
+  getCamera3D(): ResolvedFlatCamera3D | null {
+    return this._mode === 'flat' ? (this.flat?.camera3d ?? null) : null;
+  }
+
+  /** The flat world instance (null in the 3D globe) — handy for demos/tests. */
+  getFlatMap(): FlatRouteMap | null {
+    return this.flat;
+  }
+
   /** Blinking airport-city markers (3D world; null in flat mode). */
   getCityMarkers(): CityMarkersLayer | null {
     return this.cityMarkers;
@@ -302,6 +329,17 @@ export class RouteDots {
   setColors(colors: RouteDotsColors): void {
     this.options.colors = { ...this.options.colors, ...colors };
     this.palette = resolvePalette(this.options.theme ?? 'light', this.options.colors);
+    this.applyLive();
+  }
+
+  /**
+   * Removes every `colors` override, so the scene falls back to the palette of
+   * the active theme (`setColors` merges; this un-merges).
+   */
+  resetColors(): void {
+    if (this.disposed) return;
+    delete this.options.colors;
+    this.palette = resolvePalette(this.options.theme ?? 'light', undefined);
     this.applyLive();
   }
 
@@ -455,7 +493,7 @@ export class RouteDots {
 
     if (this._mode === 'flat' && this.flat) {
       this.flat.applyStyle({
-        theme: o.theme,
+        theme: o.theme ?? 'light',
         colors: o.colors,
         surface: o.flat?.surface ?? o.surface,
         stepDeg: o.flat?.stepDeg ?? o.texture?.stepDeg,

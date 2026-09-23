@@ -89,7 +89,7 @@ describe('flatCamera3DTransforms', () => {
     const transforms = flatCamera3DTransforms(
       resolveFlatCamera3D({ enabled: true, perspective: 1200, tilt: 30, yaw: -10, depth: 100 }),
     );
-    expect(transforms.viewport).toBe('perspective(1200px)');
+    expect(transforms.viewport).toBe('1200px');
     expect(transforms.world).toBe('rotateX(30.00deg) rotateZ(-10.00deg)');
     expect(transforms.routeLayer).toBe('translateZ(100.00px)');
     expect(transforms.cityLayer).toBe(
@@ -114,10 +114,11 @@ describe('easeFactor', () => {
 
 describe('zoomStep', () => {
   it('zooms in and out and respects the limits', () => {
-    expect(zoomStep(1, 1)).toBeCloseTo(1.09, 9);
-    expect(zoomStep(1, -1)).toBeCloseTo(0.91, 9);
-    expect(zoomStep(100, 1)).toBe(ZOOM_LIMITS.max);
-    expect(zoomStep(0.001, -1)).toBe(ZOOM_LIMITS.min);
+    // Scrolling up (negative deltaY) zooms in, as on any map.
+    expect(zoomStep(1, -1)).toBeCloseTo(1.09, 9);
+    expect(zoomStep(1, 1)).toBeCloseTo(0.91, 9);
+    expect(zoomStep(100, -1)).toBe(ZOOM_LIMITS.max);
+    expect(zoomStep(0.001, 1)).toBe(ZOOM_LIMITS.min);
   });
 });
 

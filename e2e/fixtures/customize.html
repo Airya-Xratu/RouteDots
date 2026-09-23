@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RouteDots E2E fixture — customisation</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        display: flex;
+      }
+      .world {
+        position: relative;
+        width: 50%;
+        height: 100vh;
+      }
+      #flat {
+        background: #0b1220;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="flat" class="world"></div>
+    <div id="globe" class="world"></div>
+    <script src="../../dist/routedots.browser.global.js"></script>
+    <script>
+      window.__state = { ready: false, error: null };
+      try {
+        const { RouteDots } = window.RouteDots;
+
+        // A fully customised flat world (forced, with the 3D camera effect).
+        const flat = new RouteDots(document.getElementById('flat'), {
+          world: 'flat',
+          colors: {
+            ocean: '#0b1220',
+            countries: '#1b2a3a',
+            borders: '#334455',
+            outbound: '#ff0066',
+            return: '#00ccff',
+            plane: '#ff0066',
+            cities: '#22cc88',
+            marker: '#f8fafc',
+          },
+          route: {
+            outbound: { angle: 25, dash: { length: 0.04, gap: 0.02, speed: 2, width: 2.5 } },
+            return: { angle: -35, dash: { length: 0.02, gap: 0.01, speed: 1 } },
+          },
+          cities: {
+            periodMs: 1200,
+            dot: { size: 0.008, dim: 0.2 },
+            ripple: { size: 0.02, width: 0.004, grow: 4, opacity: 0.8 },
+          },
+          plane: { icon: 'jet', size: 40, color: '#ff0066', flightMs: 900, pauseMs: 200 },
+          camera3d: {
+            enabled: true,
+            perspective: 900,
+            tilt: 40,
+            yaw: -12,
+            depth: 90,
+            interactive: true,
+          },
+        });
+        flat.setRoute('LHR', 'DXB', { roundTrip: true });
+
+        // A customised 3D globe, driven live from the tests.
+        const globe = new RouteDots(document.getElementById('globe'), {
+          theme: 'dark',
+          autoRotate: { enabled: false },
+          interactive: true,
+          colors: { outbound: '#0ea5e9', plane: '#0ea5e9' },
+          route: { outbound: { angle: 30 }, return: { angle: -30, lift: 0.45 } },
+          cities: { ripple: { periodMs: 900, grow: 5 } },
+          plane: { icon: { path: 'M0,-40 L18,26 L-18,26 Z', viewBox: 80 } },
+        });
+        globe.setRoute('LHR', 'DXB', { roundTrip: true });
+
+        window.__rd = { flat, globe };
+        window.__state.ready = true;
+      } catch (err) {
+        window.__state.error = String((err && err.message) || err);
+      }
+    </script>
+  </body>
+</html>

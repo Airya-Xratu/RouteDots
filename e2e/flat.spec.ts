@@ -17,17 +17,25 @@ test('flat fallback draws both routes and flies the plane', async ({ page }) => 
   const state = await page.evaluate(() => (window as unknown as Hooks).__state);
   expect(state.error, `fixture error: ${state.error}`).toBeNull();
 
+  // The world is built from addressable layers: surface → borders → cities →
+  // routes (bottom to top).
+  const layers = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('[data-rd-layer]')).map((el) =>
+      el.getAttribute('data-rd-layer'),
+    ),
+  );
+  expect(layers).toEqual(['surface', 'borders', 'cities', 'routes']);
+
   // Two route paths (outbound + return) and two endpoint markers; the
   // outbound strokes slightly heavier than the return.
   const counts = await page.evaluate(() => {
-    const svg = document.querySelector('svg');
-    const routes = svg?.querySelectorAll('path[stroke]') ?? [];
+    const routes = document.querySelectorAll('[data-rd-layer="routes"] path[stroke]');
     return {
       paths: routes.length,
       widths: Array.from(routes).map((p) => p.getAttribute('stroke-width')),
-      markers: svg?.querySelectorAll('circle:not([class])').length ?? 0,
-      cityDots: svg?.querySelectorAll('circle.rd-city-dot').length ?? 0,
-      cityRings: svg?.querySelectorAll('circle.rd-city-ring').length ?? 0,
+      markers: document.querySelectorAll('[data-rd-layer="routes"] circle:not([class])').length,
+      cityDots: document.querySelectorAll('circle.rd-city-dot').length,
+      cityRings: document.querySelectorAll('circle.rd-city-ring').length,
       dashed: Array.from(routes).every((p) => p.getAttribute('stroke-dasharray')?.includes(' ')),
     };
   });
@@ -48,11 +56,17 @@ test('flat fallback draws both routes and flies the plane', async ({ page }) => 
       dot: dots[0] ? getComputedStyle(dots[0]).animationName : null,
       ring: rings[0] ? getComputedStyle(rings[0]).animationName : null,
       distinctDelays: delays.size,
+      // The custom properties live on the city <g>, so they inherit down to
+      // every dot and ring.
+      period: getComputedStyle(dots[0]!).getPropertyValue('--rd-city-period').trim(),
+      grow: getComputedStyle(rings[0]!).getPropertyValue('--rd-city-ring-grow').trim(),
     };
   });
   expect(blink.dot).toBe('rd-city-blink');
   expect(blink.ring).toBe('rd-city-pulse');
   expect(blink.distinctDelays).toBeGreaterThan(20);
+  expect(blink.period).toBe('2600ms');
+  expect(Number(blink.grow)).toBeCloseTo(3.6, 2);
 
   // Country borders render as hairline white SVG polylines beneath the routes.
   const borders = await page.evaluate(() => {
@@ -89,24 +103,40 @@ test('flat fallback draws both routes and flies the plane', async ({ page }) => 
 
   // Named endpoints render city-name labels.
   const labels = await page.evaluate(() =>
-    Array.from(document.querySelectorAll('svg text')).map((t) => t.textContent),
+    Array.from(document.querySelectorAll('[data-rd-layer="routes"] text')).map(
+      (t) => t.textContent,
+    ),
   );
   expect(labels).toEqual(['London', 'Dubai']);
 
-  // The plane animates along the outbound path (plane group = last svg <g>).
+  // Without a 3D camera the layers stay flat — no perspective, no depth.
+  const flatCamera = await page.evaluate(() => ({
+    perspective: getComputedStyle(document.getElementById('map')!).perspective,
+    layerDepth: getComputedStyle(document.querySelector('[data-rd-layer="routes"]')!).transform,
+    world: getComputedStyle(
+      document.querySelector('[data-rd-layer="borders"]')!.parentElement!.parentElement!,
+    ).transform,
+  }));
+  expect(flatCamera.perspective).toBe('none');
+  expect(flatCamera.layerDepth).toBe('none');
+  expect(flatCamera.world).toBe('none');
+
+  // The plane animates along the outbound path (the plane group carries the
+  // icon's name) and follows the same route as the arcs.
   const readPlaneTransform = () =>
-    page.evaluate(() => {
-      const groups = document.querySelectorAll('svg g');
-      return groups.length >= 2
-        ? (groups[groups.length - 1] as SVGGElement).getAttribute('transform')
-        : null;
-    });
+    page.evaluate(
+      () => document.querySelector('[data-rd-plane]')?.getAttribute('transform') ?? null,
+    );
   const t1 = await readPlaneTransform();
   await page.waitForTimeout(700);
   const t2 = await readPlaneTransform();
   expect(t1).not.toBeNull();
   expect(t2).not.toBeNull();
   expect(t1).not.toBe(t2);
+  const planeName = await page.evaluate(() =>
+    document.querySelector('[data-rd-plane]')?.getAttribute('data-rd-plane'),
+  );
+  expect(planeName).toBe('airliner');
 
   expect(errors, `console/page errors: ${errors.join(' | ')}`).toEqual([]);
 });
