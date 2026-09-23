@@ -33,6 +33,16 @@ export interface PinProjection {
 /** Below this facing value the anchor is considered behind the globe. */
 export const HIDE_BEHIND_EPS = 0.12;
 
+/** Badge colours (usually taken from the RouteDots palette). */
+export interface PinPalette {
+  /** Pill background. */
+  background?: string;
+  /** Pill text. */
+  label?: string;
+  /** Dot on the globe surface (and its ring). */
+  dot?: string;
+}
+
 const PIN_CSS = `
 .rd-pin {
   position: absolute;
@@ -166,6 +176,7 @@ export class EndpointLabels {
     camera: THREE.PerspectiveCamera,
     viewport: () => [number, number],
     theme: 'light' | 'dark' = 'light',
+    palette?: PinPalette,
   ) {
     this.camera = camera;
     this.viewport = viewport;
@@ -176,6 +187,20 @@ export class EndpointLabels {
       'position: absolute; inset: 0; overflow: visible; pointer-events: none; z-index: 5;';
     host.appendChild(this.layer);
     injectStyles();
+    if (palette) this.setPalette(palette);
+  }
+
+  /** Restyles the badges from the palette (theme switch / `setColors`). */
+  setPalette(palette: PinPalette): void {
+    const set = (name: string, value: string | undefined): void => {
+      if (value) this.layer.style.setProperty(name, value);
+    };
+    set('--rd-pin-bg', palette.background);
+    set('--rd-pin-fg', palette.label);
+    set('--rd-pin-dot', palette.dot);
+    set('--rd-pin-stem', palette.dot);
+    // The halo behind the surface dot is the pill's own colour.
+    set('--rd-pin-ring', palette.background);
   }
 
   /** (Re)creates the badges for the given endpoints. */

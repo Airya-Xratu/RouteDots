@@ -11,6 +11,18 @@ export interface LatLon {
 }
 
 /**
+ * Which world RouteDots renders:
+ *
+ * - `auto` — the 3D globe when WebGL is available, the flat world otherwise
+ *   (the default).
+ * - `globe` — always the 3D globe (falling back to the flat world when the
+ *   browser has no WebGL).
+ * - `flat` — always the flat world, with the optional 3D camera effect
+ *   (`camera3d`).
+ */
+export type WorldMode = 'auto' | 'globe' | 'flat';
+
+/**
  * Which map surface is drawn under the routes:
  *
  * - `countries` — grey country shapes with white borders (the default).

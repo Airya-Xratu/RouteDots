@@ -4,11 +4,23 @@
  * Owns the renderer, scene, camera rig and animation loop. Route layers
  * (arcs, planes, markers) are added on top via `globeGroup` or the frame
  * callbacks, and animated by the same loop.
+ *
+ * Every colour comes from the RouteDots palette, so `setColors()` restyles
+ * the whole scene live (ocean, countries, borders, atmosphere) without
+ * rebuilding the renderer.
  */
 import * as THREE from 'three';
 import landTopo from '../data/land-110m.js';
-import { buildDotGrid } from '../core/dotPattern.js';
+import { buildDotGrid, type DotPattern } from '../core/dotPattern.js';
 import { decodeRings, type TopoLand } from '../core/topojson.js';
+import {
+  PALETTES,
+  paletteToGlobeTheme,
+  resolvePalette,
+  type GlobeTheme,
+  type RouteDotsColors,
+  type RouteDotsPalette,
+} from '../theme.js';
 import { CameraRig, type ViewState } from './cameraRig.js';
 import { createDotTexture } from './dotTexture.js';
 import { createAtmosphere } from './atmosphere.js';
@@ -20,38 +32,12 @@ import { LAYER_RADIUS } from './layerRadii.js';
 /** Which map surface the globe wears (see {@link MapSurface}). */
 export type GlobeSurface = MapSurface;
 
-export interface GlobeThemeColors {
-  /** Base sphere colour (ocean). */
-  globe: string;
-  /** Country fill colour (the `countries` surface). */
-  countries: string;
-  /** Dot colour (the legacy `dots` surface). */
-  dots: string;
-  /** Country border line colour. */
-  borders: string;
-  /** Airport-city marker colour. */
-  cities: string;
-  /** Atmosphere halo colour. */
-  atmosphere: string;
-}
+/** Colours of the globe scene (a view of the shared palette). */
+export type GlobeThemeColors = GlobeTheme;
 
 export const GLOBE_THEMES: Record<'light' | 'dark', GlobeThemeColors> = {
-  light: {
-    globe: '#f2f5f9',
-    countries: '#c3c9d4',
-    dots: '#8b93a1',
-    borders: '#ffffff',
-    cities: '#39414e',
-    atmosphere: '#93a7c4',
-  },
-  dark: {
-    globe: '#0e131c',
-    countries: '#2b3442',
-    dots: '#5b6b82',
-    borders: '#ffffff',
-    cities: '#d7e0ee',
-    atmosphere: '#3d5f8f',
-  },
+  light: paletteToGlobeTheme(PALETTES.light),
+  dark: paletteToGlobeTheme(PALETTES.dark),
 };
 
 export interface GlobeRendererOptions {
@@ -61,8 +47,11 @@ export interface GlobeRendererOptions {
    * default) or the legacy dot lattice (`dots`).
    */
   surface?: GlobeSurface;
-  /** Override individual colours. */
-  colors?: Partial<GlobeThemeColors>;
+  /**
+   * Palette overrides — any key of `RouteDotsPalette` (plus the legacy
+   * `globe` / `land` aliases). Keys the globe doesn't draw are ignored.
+   */
+  colors?: RouteDotsColors;
   /** Texture / dot lattice options. */
   texture?: {
     stepDeg?: number;
@@ -115,25 +104,36 @@ export class GlobeRenderer {
   readonly borders: BordersLayer | null;
   /** Grey country fills (null when the `dots` surface is used). */
   readonly countries: CountrySurfaceLayer | null;
+  /** The palette in use (theme + `colors` override merged). */
+  get palette(): RouteDotsPalette {
+    return this.paletteValue;
+  }
 
   private readonly container: HTMLElement;
   private readonly globeMesh: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
   private readonly atmosphere: THREE.Mesh;
-  private readonly dotTexture: THREE.CanvasTexture | null;
   private readonly frameCallbacks = new Set<(time: number, dt: number) => void>();
   private readonly onResize: () => void;
+  private readonly options: GlobeRendererOptions;
   private resizeObserver: ResizeObserver | null = null;
   private rafId = 0;
   private lastFrameMs = 0;
   private ready = false;
   private disposed = false;
   private pointerDown = false;
+  private interactiveEnabled = false;
   private lastPointer = { x: 0, y: 0 };
+  private paletteValue: RouteDotsPalette;
+  private dotTexture: THREE.CanvasTexture | null = null;
+  private readonly dotPattern: DotPattern | null = null;
 
   constructor(container: HTMLElement, options: GlobeRendererOptions = {}) {
     this.container = container;
+    this.options = options;
 
-    const themeColors = { ...GLOBE_THEMES[options.theme ?? 'light'], ...options.colors };
+    const palette = resolvePalette(options.theme ?? 'light', options.colors);
+    this.paletteValue = palette;
+    const themeColors = paletteToGlobeTheme(palette);
     const view: ViewState = options.view ?? { lat: 30, lng: 45, altitude: 1.9 };
 
     this.renderer = new THREE.WebGLRenderer({
@@ -160,14 +160,14 @@ export class GlobeRenderer {
         resDeg: options.texture?.resDeg,
       });
       // The dot texture paints its own ocean base, so the material stays white.
-      this.dotTexture = createDotTexture(pattern, {
+      const dot = createDotTexture(pattern, {
         bgColor: themeColors.globe,
         dotColor: themeColors.dots,
         dotSizeDeg: options.texture?.dotSizeDeg,
         width: options.texture?.width,
-      }).texture;
-    } else {
-      this.dotTexture = null;
+      });
+      this.dotTexture = dot.texture;
+      this.dotPattern = pattern;
     }
     const globeMaterial = new THREE.MeshBasicMaterial({
       color: this.dotTexture ? 0xffffff : new THREE.Color(themeColors.globe),
@@ -202,7 +202,8 @@ export class GlobeRenderer {
     });
     this.rig.setAutoRotate(options.autoRotate?.enabled !== false);
 
-    if (options.interactive) this.bindInteraction();
+    this.bindInteraction();
+    this.setInteractive(options.interactive === true);
 
     this.onResize = () => this.resize();
     this.resize();
@@ -224,6 +225,11 @@ export class GlobeRenderer {
     return this.pointerDown;
   }
 
+  /** True when pointer interaction is enabled. */
+  get interactive(): boolean {
+    return this.interactiveEnabled;
+  }
+
   /** Registers a per-frame callback; returns an unsubscribe function. */
   onFrame(callback: (time: number, dt: number) => void): () => void {
     this.frameCallbacks.add(callback);
@@ -241,6 +247,51 @@ export class GlobeRenderer {
 
   setAutoRotate(enabled: boolean): void {
     this.rig.setAutoRotate(enabled);
+  }
+
+  /** Turns pointer drag + wheel zoom on or off at runtime. */
+  setInteractive(enabled: boolean): void {
+    this.interactiveEnabled = enabled;
+    this.options.interactive = enabled;
+    this.renderer.domElement.style.touchAction = enabled ? 'none' : '';
+    if (!enabled) {
+      this.pointerDown = false;
+      this.rig.setAutoRotate(this.options.autoRotate?.enabled !== false);
+    }
+  }
+
+  /**
+   * Restyles the globe live: ocean, country fills, borders and the
+   * atmosphere halo. Colours left out keep their current value.
+   */
+  setColors(colors: RouteDotsColors | undefined): void {
+    this.options.colors = colors;
+    const palette = resolvePalette(this.options.theme ?? 'light', colors);
+    this.paletteValue = palette;
+    const themeColors = paletteToGlobeTheme(palette);
+
+    if (this.dotTexture && this.dotPattern) {
+      // The dot lattice bakes its colours into the texture — repaint it.
+      const texture = createDotTexture(this.dotPattern, {
+        bgColor: themeColors.globe,
+        dotColor: themeColors.dots,
+        dotSizeDeg: this.options.texture?.dotSizeDeg,
+        width: this.options.texture?.width,
+      }).texture;
+      this.dotTexture.dispose();
+      this.dotTexture = texture;
+      this.globeMesh.material.map = texture;
+      this.globeMesh.material.needsUpdate = true;
+    } else {
+      this.globeMesh.material.color.set(themeColors.globe);
+    }
+
+    this.countries?.setColor(themeColors.countries);
+    this.borders?.setColor(themeColors.borders);
+    const atmosphereMaterial = this.atmosphere.material as THREE.ShaderMaterial;
+    (atmosphereMaterial.uniforms.uColor?.value as THREE.Color | undefined)?.set(
+      themeColors.atmosphere,
+    );
   }
 
   resize(width?: number, height?: number): void {
@@ -298,15 +349,15 @@ export class GlobeRenderer {
 
   private bindInteraction(): void {
     const el = this.renderer.domElement;
-    el.style.touchAction = 'none';
     el.addEventListener('pointerdown', (e) => {
+      if (!this.interactiveEnabled) return;
       this.pointerDown = true;
       this.lastPointer = { x: e.clientX, y: e.clientY };
       el.setPointerCapture(e.pointerId);
       this.rig.setAutoRotate(false);
     });
     el.addEventListener('pointermove', (e) => {
-      if (!this.pointerDown) return;
+      if (!this.interactiveEnabled || !this.pointerDown) return;
       const dx = e.clientX - this.lastPointer.x;
       const dy = e.clientY - this.lastPointer.y;
       this.lastPointer = { x: e.clientX, y: e.clientY };
@@ -320,10 +371,12 @@ export class GlobeRenderer {
       });
     });
     el.addEventListener('pointerup', (e) => {
+      if (!this.pointerDown) return;
       this.pointerDown = false;
       el.releasePointerCapture(e.pointerId);
     });
     el.addEventListener('wheel', (e) => {
+      if (!this.interactiveEnabled) return;
       e.preventDefault();
       const s = this.rig.state;
       const nextAlt = s.altitude * (1 + Math.sign(e.deltaY) * 0.06);

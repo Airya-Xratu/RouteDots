@@ -111,3 +111,36 @@ export function drawPlane(ctx: CanvasRenderingContext2D, size: number, color: st
   drawPlanePath(ctx, segments);
   ctx.fill('nonzero');
 }
+
+/**
+ * Serializes plane path segments into SVG path data.
+ *
+ * This is what lets one icon definition serve both renderers: the canvas
+ * (WebGL sprite texture) and the flat world's `<path d="…">`. Pure and
+ * unit-tested.
+ */
+export function segmentsToPathData(segments: PlaneSegment[], digits = 2): string {
+  const n = (v: number): string => {
+    const rounded = Number(v.toFixed(digits));
+    return String(rounded === 0 ? 0 : rounded);
+  };
+  return segments
+    .map((seg) => {
+      switch (seg.op) {
+        case 'move':
+          return `M${n(seg.x)},${n(seg.y)}`;
+        case 'line':
+          return `L${n(seg.x)},${n(seg.y)}`;
+        case 'quad':
+          return `Q${n(seg.cx)},${n(seg.cy)} ${n(seg.x)},${n(seg.y)}`;
+        case 'close':
+          return 'Z';
+      }
+    })
+    .join(' ');
+}
+
+/** The default airplane outline as SVG path data (nose up, ±50 box). */
+export function planePathData(scale = 1): string {
+  return segmentsToPathData(buildPlanePath(scale));
+}

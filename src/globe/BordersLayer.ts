@@ -89,6 +89,18 @@ export class BordersLayer {
     parent.add(this.lines);
   }
 
+  /** Restyles the border colour (theme switch / palette updates). */
+  setColor(color: string): void {
+    this.lines.material.color.set(color);
+  }
+
+  /** Restyles the border opacity, 0..1. */
+  setOpacity(opacity: number): void {
+    this.lines.material.opacity = Math.min(1, Math.max(0, opacity));
+    this.lines.material.transparent = this.lines.material.opacity < 1;
+    this.lines.material.needsUpdate = true;
+  }
+
   dispose(): void {
     this.lines.removeFromParent();
     this.lines.geometry.dispose();
