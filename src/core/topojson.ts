@@ -1,9 +1,11 @@
 /**
  * Minimal TopoJSON decoder (structural subset, no external dependencies).
  *
- * Just enough to turn a world-atlas `land-110m.json` topology into plain
- * rings of [lng, lat] coordinates for the rasterizer.
+ * Just enough to turn a world-atlas `land-110m.json` / `countries-110m.json`
+ * topology into plain rings of [lng, lat] coordinates for the rasterizer, the
+ * country fills and the border lines.
  */
+import { splitPolygonAtAntimeridian } from './antimeridian.js';
 
 /** A single [lng, lat] coordinate. */
 export type Point = [number, number];
@@ -78,12 +80,15 @@ function decodeStoredArc(arc: number[][], transform?: TopoTransform): Ring {
   });
 }
 
+/** Builds a closed ring from a list of arc indices (shared-arc aware). */
+type RingBuilder = (arcIndices: number[]) => Ring;
+
 /**
- * Decodes a quantized or absolute-coordinate topology into polygon rings.
- *
- * @returns An array of polygons, each `[outerRing, ...holes]`.
+ * Creates a memoized ring builder for a topology: arcs are decoded once and
+ * reused (with reversal for negative indices), then concatenated into closed
+ * rings.
  */
-export function decodeRings(topo: TopoLand): PolygonRings[] {
+function createRingBuilder(topo: { arcs: number[][][]; transform?: TopoTransform }): RingBuilder {
   const cache = new Map<number, Ring>();
 
   const decodeArc = (index: number): Ring => {
@@ -98,7 +103,7 @@ export function decodeRings(topo: TopoLand): PolygonRings[] {
     return resolved;
   };
 
-  const buildRing = (arcIndices: number[]): Ring => {
+  return (arcIndices: number[]): Ring => {
     const ring: Ring = [];
     for (const arcIndex of arcIndices) {
       const arc = decodeArc(arcIndex);
@@ -115,21 +120,42 @@ export function decodeRings(topo: TopoLand): PolygonRings[] {
     }
     return ring;
   };
+}
 
+/** Walks Polygon / MultiPolygon geometries into `[outerRing, ...holes]` polygons. */
+function collectPolygons(geometries: TopoGeometry[], buildRing: RingBuilder): PolygonRings[] {
   const polygons: PolygonRings[] = [];
-  for (const geometry of topo.objects.land.geometries) {
+  for (const geometry of geometries) {
     const raw = geometry.arcs ?? [];
-    if (geometry.type === 'Polygon') {
-      const rings = (raw as number[][]).map(buildRing);
+    const candidates: number[][][] =
+      geometry.type === 'Polygon' ? [raw as number[][]] : (raw as number[][][]);
+    for (const poly of candidates) {
+      const rings = poly.map(buildRing);
       if (rings.some((r) => r.length > 2)) polygons.push(rings);
-    } else if (geometry.type === 'MultiPolygon') {
-      for (const poly of raw as number[][][]) {
-        const rings = poly.map(buildRing);
-        if (rings.some((r) => r.length > 2)) polygons.push(rings);
-      }
     }
   }
   return polygons;
+}
+
+/**
+ * Decodes a quantized or absolute-coordinate topology into polygon rings.
+ *
+ * @returns An array of polygons, each `[outerRing, ...holes]`.
+ */
+export function decodeRings(topo: TopoLand): PolygonRings[] {
+  return collectPolygons(topo.objects.land.geometries, createRingBuilder(topo));
+}
+
+/**
+ * Decodes a countries topology into fillable polygons: every country polygon
+ * (holes included), split at the antimeridian so no part crosses ±180° and
+ * degenerate clipping slivers are dropped.
+ *
+ * @returns An array of polygons, each `[outerRing, ...holes]`.
+ */
+export function decodeCountryPolygons(topo: TopoCountries): PolygonRings[] {
+  const polygons = collectPolygons(topo.objects.countries.geometries, createRingBuilder(topo));
+  return polygons.flatMap((polygon) => splitPolygonAtAntimeridian(polygon));
 }
 
 /** Total number of vertices across all rings (handy for profiling/tests). */

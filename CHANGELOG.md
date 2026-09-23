@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Country fills: the map surface is now grey country shapes with white
+  borders instead of the dot lattice — the flat-map look, on the sphere.
+  - New `surface: 'countries' | 'dots'` option on `RouteDots`,
+    `GlobeRenderer` and `FlatRouteMap` (`countries` is the default; `dots`
+    keeps the classic lattice).
+  - Pure seam handling in `src/core/antimeridian.ts`: rings are unwrapped
+    into continuous longitudes and clipped at the meridian they overshoot,
+    so Russia / Fiji / Antarctica fill correctly; enclaves (Lesotho) stay
+    holes.
+  - `CountrySurfaceLayer` (`src/globe/countrySurface.ts`): earcut
+    triangulation projected onto the sphere and subdivided until no chord
+    sags below its shell — the whole world in one ~15k-triangle draw call.
+  - Flat fallback paints the same polygons on its canvas
+    (`flat/countryPaths.ts`, even-odd fill, seam copies duplicated).
+  - Unit tests for the seam clipping, the triangulation (land/ocean
+    coverage, watertightness, determinism) and the path data; E2E asserts
+    grey fills + white borders in both modes.
+
+### Changed
+
+- Border lines default to white at full opacity and every surface-hugging
+  layer now takes its radius from one table (`src/globe/layerRadii.ts`:
+  ocean → country fills → borders → city pulses → markers → pulses) so the
+  stack never z-fights; route endpoint markers and pulse rings were lifted
+  accordingly.
+- Theme colours: `GlobeThemeColors.countries` (the fill) is new, the light
+  ocean tone moves `#ffffff → #f2f5f9` so white borders read, and
+  `FLAT_THEMES` gains `land`; `dots` keeps the legacy lattice colour.
+
+### Added
+
 - Camera tracking: the globe follows the plane. While a route is set, idle
   auto-rotation pauses and the camera eases back toward the plane whenever
   its ground position leaves the visible disc — the threshold is the visible

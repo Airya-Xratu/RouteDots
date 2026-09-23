@@ -21,11 +21,14 @@ src/
 ├── RouteDots.ts              Public facade: mode selection, routing, events
 ├── core/
 │   ├── topojson.ts           Minimal TopoJSON decoder → PolygonRings
+│   ├── antimeridian.ts       Seam-safe ring splitting (unwrap + clip) — pure
 │   ├── landRaster.ts         Even-odd scanline land raster → LatGrid
 │   ├── dotPattern.ts         Dot lattice over land (buildDotGrid)
 │   └── greatCircle.ts        lat/lng ↔ vec3, slerp, distances, lifted arcs
 ├── globe/                    three.js scene
 │   ├── cameraRig.ts          Point-of-view state machine (pure)
+│   ├── layerRadii.ts         Radii of the surface-hugging layer stack
+│   ├── countrySurface.ts     Country fills: earcut + conforming subdivision
 │   ├── dotTexture.ts         Dot-lattice → equirectangular canvas texture
 │   ├── atmosphere.ts         Fresnel rim glow shader
 │   └── GlobeRenderer.ts      Scene/camera/RAF loop, resize, interaction
@@ -39,7 +42,8 @@ src/
 │   ├── PlaneLayer.ts         Sprite following the outbound arc
 │   └── EndpointLabels.ts     DOM pin badges + projection (projectPin, pure)
 ├── flat/
-│   └── FlatRouteMap.ts       No-WebGL fallback (canvas dots + SVG routes)
+│   ├── countryPaths.ts       Country polygons → SVG path data (pure)
+│   └── FlatRouteMap.ts       No-WebGL fallback (canvas fills + SVG routes)
 └── data/
     └── land-110m.ts          Bundled world land mask (world-atlas, generated)
 ```
@@ -60,8 +64,36 @@ src/
    fallback, so both modes look consistent.
 6. `decodeBorderArcs` turns the bundled `countries-110m` topology (shared
    TopoJSON arcs) into country border polylines — each border exactly once —
-   lifted to a `LineSegments` sphere on the globe (`BordersLayer`) and drawn
-   as SVG polylines in the flat fallback (split at the antimeridian).
+   lifted to a `LineSegments` sphere just above the country fills
+   (`BordersLayer`) and drawn as SVG polylines in the flat fallback (split at
+   the antimeridian).
+
+## The country fill pipeline
+
+The default surface (`surface: 'countries'`) paints grey country shapes with
+white borders instead of the dot lattice:
+
+1. `decodeCountryPolygons` walks the `countries-110m` geometries into
+   `[outer, ...holes]` polygons, then `core/antimeridian.ts` makes every ring
+   seam-safe: longitudes are unwrapped into a continuous sequence (so a
+   ±180° duplicate — Antarctica — is _not_ a crossing) and the ring is
+   clipped against the meridian it overshoots, the clipped-off part wrapping
+   back by a full turn (Russia, Fiji).
+2. `countrySurface.triangulatePolygonOnSphere` triangulates each polygon in
+   lng/lat space with three.js' earcut (`ShapeUtils.triangulateShape`) and
+   projects every triangle onto the sphere.
+3. Triangles longer than `DEFAULT_MAX_EDGE_DEG` (6°) are recursively split at
+   their edge midpoints — midpoints are shared by neighbouring triangles, so
+   the mesh stays watertight. The 6° budget keeps a chord's sag
+   (`1 − cos 3° ≈ 0.0014`) inside the fill shell's lift (1.0025), so no
+   triangle dips under the ocean sphere.
+4. The ~15k triangles ship as one non-indexed `BufferGeometry` (one draw
+   call), double-sided because earcut's winding varies per country.
+5. The flat fallback paints the same polygons on its canvas via
+   `flat/countryPaths.ts` (one SVG path datum per polygon, filled even-odd,
+   seam copies duplicated by a map width).
+
+The dot lattice stays available as `surface: 'dots'`.
 
 ## Route geometry
 

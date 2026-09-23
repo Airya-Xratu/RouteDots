@@ -10,6 +10,14 @@ export interface LatLon {
   lng: number;
 }
 
+/**
+ * Which map surface is drawn under the routes:
+ *
+ * - `countries` — grey country shapes with white borders (the default).
+ * - `dots` — the classic dot lattice over the land mask.
+ */
+export type MapSurface = 'countries' | 'dots';
+
 /** A city (or any named point) that can be used as a route endpoint. */
 export interface City extends LatLon {
   /** IATA airport code, e.g. "DXB". */

@@ -11,6 +11,7 @@
  */
 import * as THREE from 'three';
 import { latLngToVec } from '../core/greatCircle.js';
+import { LAYER_RADIUS } from '../globe/layerRadii.js';
 import type { LatLon } from '../types.js';
 import {
   DEFAULT_ARC_RADIUS,
@@ -223,7 +224,7 @@ export class RouteLayer {
     const material = new THREE.MeshBasicMaterial({ color: this.theme.marker });
     for (const point of [origin, dest]) {
       const marker = new THREE.Mesh(geometry, material);
-      const v = latLngToVec(point.lat, point.lng, 1.001);
+      const v = latLngToVec(point.lat, point.lng, LAYER_RADIUS.markers);
       marker.position.set(v[0], v[1], v[2]);
       this.group.add(marker);
       this.markers.push(marker);
@@ -243,7 +244,7 @@ export class RouteLayer {
           depthWrite: false,
         });
         const ring = new THREE.Mesh(geometry, material);
-        const v = latLngToVec(point.lat, point.lng, 1.002);
+        const v = latLngToVec(point.lat, point.lng, LAYER_RADIUS.pulses);
         ring.position.set(v[0], v[1], v[2]);
         ring.lookAt(v[0] * 2, v[1] * 2, v[2] * 2);
         ring.renderOrder = 3;

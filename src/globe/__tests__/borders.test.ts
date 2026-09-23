@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { latLngToVec } from '../../core/greatCircle.js';
 import countries from '../../data/countries-110m.js';
-import { BordersLayer, borderSegments, countBorderSegments } from '../BordersLayer.js';
+import {
+  BordersLayer,
+  DEFAULT_BORDER_OPACITY,
+  borderSegments,
+  countBorderSegments,
+} from '../BordersLayer.js';
+import { LAYER_RADIUS } from '../layerRadii.js';
 import { decodeBorderArcs, type Ring } from '../../core/topojson.js';
 
 const TRIANGLE: Ring = [
@@ -71,7 +77,14 @@ describe('BordersLayer — bundled countries', () => {
 
   it('uses the defaults when no options are given', () => {
     const layer = new BordersLayer(new THREE.Group());
-    expect(layer.lines.material.opacity).toBe(0.55);
+    // White hairlines at full opacity, lifted just above the country fills.
+    expect(layer.lines.material.color.getHexString()).toBe('ffffff');
+    expect(layer.lines.material.opacity).toBe(DEFAULT_BORDER_OPACITY);
+    const positions = layer.lines.geometry.getAttribute('position');
+    expect(Math.hypot(positions.getX(0), positions.getY(0), positions.getZ(0))).toBeCloseTo(
+      LAYER_RADIUS.borders,
+      6,
+    );
     layer.dispose();
   });
 });

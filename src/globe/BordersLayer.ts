@@ -1,9 +1,9 @@
 /**
- * BordersLayer — light country-border lines drawn on the dot globe.
+ * BordersLayer — white country-border lines drawn on the map.
  *
  * The bundled world-atlas `countries-110m` topology is decoded once into
  * border polylines (shared TopoJSON arcs, so every border appears exactly
- * once) and lifted onto a sphere hugging the globe surface as a single
+ * once) and lifted onto a sphere just above the country fills as a single
  * `LineSegments` draw call. Lines behind the globe are occluded by the
  * opaque sphere; lines are drawn below the route arcs.
  */
@@ -11,18 +11,25 @@ import * as THREE from 'three';
 import { latLngToVec } from '../core/greatCircle.js';
 import { decodeBorderArcs, type Ring } from '../core/topojson.js';
 import countriesTopo from '../data/countries-110m.js';
+import { LAYER_RADIUS } from './layerRadii.js';
 
 export interface BordersLayerOptions {
   /** Line colour (default: the theme's border colour). */
   color?: string;
-  /** Line opacity, 0..1 (default 0.55). */
+  /** Line opacity, 0..1 (default {@link DEFAULT_BORDER_OPACITY}). */
   opacity?: number;
-  /** Sphere radius the lines sit on, in globe radii (default 1.002). */
+  /** Sphere radius the lines sit on, in globe radii (default {@link DEFAULT_BORDER_RADIUS}). */
   radius?: number;
 }
 
 /** Radius the border lines are lifted to, as a fraction of the globe radius. */
-export const DEFAULT_BORDER_RADIUS = 1.002;
+export const DEFAULT_BORDER_RADIUS: number = LAYER_RADIUS.borders;
+
+/** Border line opacity — white hairlines separating the grey country fills. */
+export const DEFAULT_BORDER_OPACITY = 1;
+
+/** Default border colour when no theme is in play. */
+export const DEFAULT_BORDER_COLOR = '#ffffff';
 
 /**
  * Converts border polylines ([lng, lat] rings) into a flat array of 3D line
@@ -73,9 +80,9 @@ export class BordersLayer {
       new THREE.BufferAttribute(borderSegments(rings, options.radius), 3),
     );
     const material = new THREE.LineBasicMaterial({
-      color: options.color ?? '#8b93a1',
+      color: options.color ?? DEFAULT_BORDER_COLOR,
       transparent: true,
-      opacity: options.opacity ?? 0.55,
+      opacity: options.opacity ?? DEFAULT_BORDER_OPACITY,
       depthWrite: false,
     });
     this.lines = new THREE.LineSegments(geometry, material);
