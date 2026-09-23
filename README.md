@@ -7,6 +7,7 @@ and a flat 2D fallback for browsers without WebGL.
 
 ![Hero with a round-trip route drawn across the dot globe](./docs/images/hero-globe.png)
 
+
 |                                            |                                                            |
 | ------------------------------------------ | ---------------------------------------------------------- |
 | ![Dark theme](./docs/images/hero-dark.png) | ![No-WebGL flat fallback](./docs/images/flat-fallback.png) |
