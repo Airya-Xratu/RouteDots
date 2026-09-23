@@ -33,6 +33,11 @@ import type { ResolvedRouteStyle, RouteStyleOptions } from './routes/routeStyle.
 import { FlatRouteMap, type FlatRouteMapOptions } from './flat/FlatRouteMap.js';
 import type { FlatCamera3DOptions, ResolvedFlatCamera3D } from './flat/camera3d.js';
 import type { CityMarkersOptions, ResolvedCityMarkers } from './markers/rippleStyle.js';
+import {
+  resolveCityLabelStyle,
+  type CityLabelTextStyle,
+  type ResolvedCityLabelStyle,
+} from './labels/textStyle.js';
 import { angularDistance, DEG, greatCircleMidpoint } from './core/greatCircle.js';
 import type { TopoLand } from './core/topojson.js';
 import { resolvePalette, type RouteDotsColors, type RouteDotsPalette } from './theme.js';
@@ -87,6 +92,12 @@ export interface RouteDotsOptions {
    * opacity and period. `list` replaces the bundled city dataset.
    */
   cities?: CityMarkersOptions & { list?: readonly City[] };
+  /**
+   * Text style of the **city-name labels** (the globe's pin badges and the
+   * flat map's city names): font family / size / weight, letter spacing,
+   * text and badge colours, flat-map halo.
+   */
+  labels?: CityLabelTextStyle;
   /** 3D camera effect for the flat world (perspective, tilt, depth, orbit). */
   camera3d?: FlatCamera3DOptions;
   /** Camera pan/zoom when a route is set (default true). */
@@ -219,6 +230,13 @@ export class RouteDots {
   getCityStyle(): ResolvedCityMarkers | null {
     if (this._mode === 'webgl') return this.cityMarkers?.resolvedStyle ?? null;
     if (this._mode === 'flat') return this.flat?.activeCityStyle ?? null;
+    return null;
+  }
+
+  /** The resolved city-name label text style in use (null before mount). */
+  getLabelStyle(): ResolvedCityLabelStyle | null {
+    if (this._mode === 'webgl') return this.pins?.labelStyle ?? null;
+    if (this._mode === 'flat') return this.flat?.activeLabelStyle ?? null;
     return null;
   }
 
@@ -500,6 +518,7 @@ export class RouteDots {
         label: palette.label,
         dot: palette.marker,
       });
+      this.pins?.setTextStyle(resolveCityLabelStyle(palette, o.labels));
       return;
     }
 
@@ -515,6 +534,7 @@ export class RouteDots {
             ? undefined
             : { enabled: o.borders.enabled, color: o.borders.color, width: o.borders.width },
         route: o.route,
+        labels: o.labels,
         cities:
           o.cities === undefined
             ? undefined
@@ -646,6 +666,7 @@ export class RouteDots {
         dot: this.palette.marker,
       },
     );
+    this.pins.setTextStyle(resolveCityLabelStyle(this.palette, o.labels));
 
     if (o.cities?.enabled !== false) {
       this.cityMarkers = this.createCityMarkers();
@@ -701,6 +722,7 @@ export class RouteDots {
       stepDeg: o.flat?.stepDeg ?? o.texture?.stepDeg,
       width: o.flat?.width ?? 1600,
       route: o.route,
+      labels: o.labels,
       plane: {
         ...o.flat?.plane,
         ...o.plane,

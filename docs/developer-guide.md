@@ -66,6 +66,7 @@ Or import the ESM build from a CDN:
 | `borders`     | `{ enabled?, color?, opacity?, width? }`     | on, white, 1 / 1 px    | Country border lines. `opacity` = globe, `width` = flat-map stroke (px).              |
 | `route`       | `RouteStyleOptions`                          | see below              | Per-leg colour, opacity, lift, **curve angle**, width and **dash pattern**.           |
 | `cities`      | `CityMarkersOptions`                         | see below              | City markers: colour, period, dot size/dim, **ripple** size/thickness/growth/opacity. |
+| `labels`      | `CityLabelTextStyle`                         | see below              | City-name **text style** — font, size, weight, spacing, colours, halo.                |
 | `plane`       | `PlaneLayerOptions & { enabled? }`           | on                     | Animated plane — **icon component**, size, colour, timing (see below).                |
 | `camera3d`    | `FlatCamera3DOptions`                        | off                    | The flat world's **3D camera effect** (perspective, tilt, yaw, depth, orbit).         |
 | `frameRoute`  | `boolean`                                    | `true`                 | Pan/zoom the camera to frame each new route.                                          |
@@ -139,6 +140,36 @@ new RouteDots(el, {
 `grow` is how far the ring expands over one cycle (as a multiple of its own
 radius) and `size`/`width` are outer radius / thickness in globe radii; the
 flat world scales the same numbers into px.
+
+#### City-name labels (`labels`)
+
+Text style of the city names at the route ends — the globe's pin badges and
+the flat map's haloed labels share one option:
+
+| Key             | Default                 | Description                                                        |
+| --------------- | ----------------------- | ------------------------------------------------------------------ |
+| `color`         | theme `label`           | Text colour.                                                       |
+| `background`    | theme `labelBackground` | Badge pill behind the text (globe); `false` removes pill + shadow. |
+| `fontFamily`    | system UI stack         | CSS `font-family` list.                                            |
+| `fontSize`      | `12`                    | Font size in px (the flat map scales it ×2 into its map space).    |
+| `fontWeight`    | `600`                   | CSS `font-weight`.                                                 |
+| `letterSpacing` | `0.01em`                | CSS `letter-spacing`.                                              |
+| `halo`          | theme `ocean`           | Flat-map halo behind the glyphs; `false` disables it.              |
+| `haloWidth`     | `6`                     | Flat-map halo width (map px).                                      |
+
+```ts
+new RouteDots(el, {
+  labels: {
+    fontFamily: "'SF Mono', ui-monospace, monospace",
+    fontSize: 14,
+    fontWeight: 500,
+    letterSpacing: '0.08em',
+    color: '#e2e8f0',
+    background: 'rgba(10, 18, 32, 0.72)',
+  },
+});
+// live: rd.setOptions({ labels: { fontSize: 18 } }); rd.getLabelStyle();
+```
 
 #### Plane (`plane`)
 

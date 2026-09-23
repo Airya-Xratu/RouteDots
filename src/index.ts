@@ -29,6 +29,9 @@ export * from './core/greatCircle.js';
 export * from './markers/blinkPattern.js';
 export * from './markers/rippleStyle.js';
 
+// City-name label text style (pin badges + flat labels)
+export * from './labels/textStyle.js';
+
 // Globe renderer (three.js)
 export * from './globe/cityShader.js';
 export * from './globe/CityMarkersLayer.js';

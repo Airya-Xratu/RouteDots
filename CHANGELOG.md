@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **City-name text style (`labels`)** — the city names at the route ends are
+  now the developer's to typeset, in both worlds with one option: `color`,
+  `background` (globe pin badge; `false` = bare text), `fontFamily`,
+  `fontSize`, `fontWeight`, `letterSpacing`, and the flat map's `halo` /
+  `haloWidth`. Set it at construction or live (`rd.setOptions({ labels: … })`);
+  `rd.getLabelStyle()` returns the resolved numbers
+  (`src/labels/textStyle.ts`).
+
 ### Fixed
 
 - **3D globe: route-line customizations now show.** `route.width` /
