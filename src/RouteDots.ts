@@ -25,6 +25,7 @@ import { RouteLayer, type RouteLayerOptions } from './routes/RouteLayer.js';
 import { PlaneLayer, type PlaneLayerOptions } from './routes/PlaneLayer.js';
 import { trackCamera } from './routes/cameraTracking.js';
 import { EndpointLabels } from './routes/EndpointLabels.js';
+import { CityMarkersLayer } from './globe/CityMarkersLayer.js';
 import { FlatRouteMap, type FlatRouteMapOptions } from './flat/FlatRouteMap.js';
 import { angularDistance, DEG, greatCircleMidpoint } from './core/greatCircle.js';
 import type { TopoLand } from './core/topojson.js';
@@ -56,6 +57,16 @@ export interface RouteDotsOptions {
     pulse?: boolean;
   };
   plane?: PlaneLayerOptions & { enabled?: boolean };
+  /**
+   * Blinking circles at every airport city (WebGL + flat fallback).
+   * `list` replaces the bundled city dataset.
+   */
+  cities?: {
+    enabled?: boolean;
+    color?: string;
+    periodMs?: number;
+    list?: readonly City[];
+  };
   /** Camera pan/zoom when a route is set (default true). */
   frameRoute?: boolean;
   /** Enable the flat no-WebGL fallback (default true). */
@@ -99,6 +110,7 @@ export class RouteDots {
   private layer: RouteLayer | null = null;
   private plane: PlaneLayer | null = null;
   private pins: EndpointLabels | null = null;
+  private cityMarkers: CityMarkersLayer | null = null;
   private flat: FlatRouteMap | null = null;
 
   private readonly options: Required<Pick<RouteDotsOptions, 'theme'>> & RouteDotsOptions;
@@ -125,6 +137,11 @@ export class RouteDots {
   /** Active render mode ('webgl' | 'flat'), or null when mounting failed. */
   get mode(): RouteDotsMode | null {
     return this._mode;
+  }
+
+  /** Blinking airport-city markers (WebGL mode; null in flat mode). */
+  getCityMarkers(): CityMarkersLayer | null {
+    return this.cityMarkers;
   }
 
   /** Current route (resolved cities + trip type), if any. */
@@ -331,9 +348,18 @@ export class RouteDots {
       o.theme,
     );
 
+    if (o.cities?.enabled !== false) {
+      this.cityMarkers = new CityMarkersLayer(this.globe.globeGroup, {
+        cities: o.cities?.list,
+        color: o.cities?.color ?? { ...GLOBE_THEMES[o.theme], ...o.colors }.cities,
+        periodMs: o.cities?.periodMs,
+      });
+    }
+
     this.globe.onFrame((time, dtSec) => {
       this.layer?.update(time);
       if (this.plane) this.plane.update(time, this.globe!.camera);
+      this.cityMarkers?.update(time);
       this.updateCameraTracking(dtSec);
       this.pins?.update();
     });
@@ -359,6 +385,8 @@ export class RouteDots {
   }
 
   private unmountWebGL(): void {
+    this.cityMarkers?.dispose();
+    this.cityMarkers = null;
     this.plane?.dispose();
     this.plane = null;
     this.pins?.dispose();
@@ -379,6 +407,14 @@ export class RouteDots {
       flightMs: o.flat?.flightMs ?? o.plane?.flightMs,
       pauseMs: o.flat?.pauseMs ?? o.plane?.pauseMs,
       land: o.land,
+      cities:
+        o.cities === undefined
+          ? undefined
+          : {
+              enabled: o.cities.enabled,
+              periodMs: o.cities.periodMs,
+              list: o.cities.list,
+            },
       borders:
         o.borders === undefined
           ? undefined

@@ -29,6 +29,8 @@ export interface GlobeThemeColors {
   dots: string;
   /** Country border line colour. */
   borders: string;
+  /** Airport-city marker colour. */
+  cities: string;
   /** Atmosphere halo colour. */
   atmosphere: string;
 }
@@ -39,6 +41,7 @@ export const GLOBE_THEMES: Record<'light' | 'dark', GlobeThemeColors> = {
     countries: '#c3c9d4',
     dots: '#8b93a1',
     borders: '#ffffff',
+    cities: '#39414e',
     atmosphere: '#93a7c4',
   },
   dark: {
@@ -46,6 +49,7 @@ export const GLOBE_THEMES: Record<'light' | 'dark', GlobeThemeColors> = {
     countries: '#2b3442',
     dots: '#5b6b82',
     borders: '#ffffff',
+    cities: '#d7e0ee',
     atmosphere: '#3d5f8f',
   },
 };

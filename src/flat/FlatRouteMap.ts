@@ -18,9 +18,11 @@ import {
   decodeRings,
   type TopoLand,
 } from '../core/topojson.js';
-import { flatBorderPoints } from './borderPolylines.js';
+import { flatBorderPoints, roundPixel } from './borderPolylines.js';
 import { flatCountryPaths } from './countryPaths.js';
-import type { LatLon, MapSurface } from '../types.js';
+import { CITIES } from '../cities.js';
+import { DEFAULT_BLINK_PERIOD_MS, blinkPhase } from '../markers/blinkPattern.js';
+import type { City, LatLon, MapSurface } from '../types.js';
 
 export interface FlatTheme {
   /** Ocean / page background. */
@@ -31,6 +33,8 @@ export interface FlatTheme {
   dot: string;
   /** Country border stroke. */
   border: string;
+  /** Airport-city marker colour. */
+  city: string;
   outbound: string;
   return: string;
   marker: string;
@@ -46,6 +50,7 @@ export const FLAT_THEMES: Record<'light' | 'dark', FlatTheme> = {
     outbound: '#23262e',
     return: '#8b93a1',
     marker: '#23262e',
+    city: '#39414e',
     plane: '#14161a',
   },
   dark: {
@@ -56,6 +61,7 @@ export const FLAT_THEMES: Record<'light' | 'dark', FlatTheme> = {
     outbound: '#cfd8e6',
     return: '#5b6b82',
     marker: '#e2e8f0',
+    city: '#d7e0ee',
     plane: '#e2e8f0',
   },
 };
@@ -81,6 +87,12 @@ export interface FlatRouteMapOptions {
   };
   /** Map canvas width in CSS px (default 1600). */
   width?: number;
+  /** Blinking circles at every airport city (default enabled). */
+  cities?: {
+    enabled?: boolean;
+    periodMs?: number;
+    list?: readonly City[];
+  };
   /** Flight time / pause for the plane (ms). */
   flightMs?: number;
   pauseMs?: number;
@@ -93,6 +105,35 @@ interface FlatRouteOptions {
 /** A route endpoint; `name` (when given) renders a text label. */
 export interface FlatRoutePoint extends LatLon {
   name?: string;
+}
+
+const CITY_CSS = `
+@keyframes rd-city-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+@keyframes rd-city-pulse {
+  0% { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(3.6); opacity: 0; }
+}
+.rd-city-dot {
+  animation: rd-city-blink var(--rd-city-period, 2600ms) linear infinite;
+}
+.rd-city-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rd-city-pulse var(--rd-city-period, 2600ms) linear infinite;
+}
+`;
+
+let cityCssInjected = false;
+
+function injectCityStyles(): void {
+  if (cityCssInjected || typeof document === 'undefined') return;
+  cityCssInjected = true;
+  const style = document.createElement('style');
+  style.textContent = CITY_CSS;
+  document.head.appendChild(style);
 }
 
 // Rounded top-view airliner (nose up), ~20px tip-to-tail.
@@ -109,6 +150,7 @@ export class FlatRouteMap {
   private readonly canvas: HTMLCanvasElement;
   private readonly svg: SVGSVGElement;
   private readonly borderGroup: SVGGElement;
+  private readonly cityGroup: SVGGElement;
   private readonly routeGroup: SVGGElement;
   private readonly planeEl: SVGGElement;
   private readonly theme: FlatTheme;
@@ -165,10 +207,13 @@ export class FlatRouteMap {
     this.svg.style.height = '100%';
     this.svg.style.pointerEvents = 'none';
     this.borderGroup = document.createElementNS(ns, 'g');
+    this.cityGroup = document.createElementNS(ns, 'g');
     this.routeGroup = document.createElementNS(ns, 'g');
     this.planeEl = document.createElementNS(ns, 'g');
     this.svg.appendChild(this.borderGroup);
     if (options.borders?.enabled !== false) this.renderBorders(options);
+    this.svg.appendChild(this.cityGroup);
+    if (options.cities?.enabled !== false) this.renderCities(options);
     this.svg.appendChild(this.routeGroup);
     this.svg.appendChild(this.planeEl);
     this.stage.appendChild(this.svg);
@@ -273,6 +318,40 @@ export class FlatRouteMap {
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+
+  /**
+   * Blinking dot + expanding ring at every airport city, under the routes.
+   * Phases are spread with the same golden-ratio offsets as the WebGL layer;
+   * the CSS animation delay is simply the negative phase.
+   */
+  private renderCities(options: FlatRouteMapOptions): void {
+    const period = options.cities?.periodMs ?? DEFAULT_BLINK_PERIOD_MS;
+    injectCityStyles();
+    this.cityGroup.style.setProperty('--rd-city-period', `${period}ms`);
+    const ns = 'http://www.w3.org/2000/svg';
+    const cities = options.cities?.list ?? CITIES;
+    cities.forEach((city, index) => {
+      const [x, y] = this.project(city);
+      const delay = `${Math.round(-blinkPhase(index) * period)}ms`;
+      const ring = document.createElementNS(ns, 'circle');
+      ring.setAttribute('class', 'rd-city-ring');
+      ring.setAttribute('cx', String(roundPixel(x)));
+      ring.setAttribute('cy', String(roundPixel(y)));
+      ring.setAttribute('r', '4');
+      ring.setAttribute('fill', 'none');
+      ring.setAttribute('stroke', this.theme.city);
+      ring.setAttribute('stroke-width', '1.2');
+      ring.style.animationDelay = delay;
+      const dot = document.createElementNS(ns, 'circle');
+      dot.setAttribute('class', 'rd-city-dot');
+      dot.setAttribute('cx', String(roundPixel(x)));
+      dot.setAttribute('cy', String(roundPixel(y)));
+      dot.setAttribute('r', '2.6');
+      dot.setAttribute('fill', this.theme.city);
+      dot.style.animationDelay = delay;
+      this.cityGroup.append(ring, dot);
+    });
   }
 
   /** Draws the country borders as SVG polylines under the route group. */

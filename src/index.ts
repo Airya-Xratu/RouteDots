@@ -22,7 +22,12 @@ export * from './core/landRaster.js';
 export * from './core/dotPattern.js';
 export * from './core/greatCircle.js';
 
+// Airport-city markers
+export * from './markers/blinkPattern.js';
+
 // Globe renderer (three.js)
+export * from './globe/cityShader.js';
+export * from './globe/CityMarkersLayer.js';
 export * from './globe/cameraRig.js';
 export * from './globe/layerRadii.js';
 export * from './globe/dotTexture.js';
