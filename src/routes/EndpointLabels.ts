@@ -19,6 +19,11 @@ export interface PinPoint {
   name: string;
   lat: number;
   lng: number;
+  /**
+   * Colour of this pin's surface dot — the resolved airport colour of the
+   * endpoint (source / destination), when the `airports` option customizes it.
+   */
+  dotColor?: string;
 }
 
 /** Result of projecting one pin for the current camera. */
@@ -238,6 +243,9 @@ export class EndpointLabels {
       const dot = document.createElement('span');
       dot.className = 'rd-pin-dot';
       el.append(label, stem, dot);
+      // A customized endpoint (airports.source / airports.destination) colours
+      // its own pin dot; the layer default applies otherwise.
+      if (p.dotColor) el.style.setProperty('--rd-pin-dot', p.dotColor);
       this.layer.appendChild(el);
       this.pins.push({ el, v: new THREE.Vector3(...latLngToVec(p.lat, p.lng, 1)) });
     }

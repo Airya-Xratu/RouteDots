@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Source / destination airports (`airports`)** — the route endpoints are
+  now customizable per side: `color` / `size` for the dot (globe radii on the
+  globe, map px on the flat map), `ringColor` / `ring` for the one-shot pulse
+  ring, with shared defaults plus `source` / `destination` overrides. The
+  endpoint's pin dot follows, so marker, pulse and badge read as one airport;
+  `rd.getAirportStyle()` returns the resolved styles
+  (`src/routes/airportStyle.ts`).
 - **City-name text style (`labels`)** — the city names at the route ends are
   now the developer's to typeset, in both worlds with one option: `color`,
   `background` (globe pin badge; `false` = bare text), `fontFamily`,

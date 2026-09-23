@@ -19,6 +19,12 @@ import { buildRoute, type RouteArcSpec, type RouteSpec } from './RouteModel.js';
 import { GreatCircleCurve } from './GreatCircleCurve.js';
 import { ROUTE_FRAGMENT, ROUTE_VERTEX } from './routeShader.js';
 import {
+  resolveAirportsStyle,
+  type AirportsStyleOptions,
+  type ResolvedAirportEndpoint,
+  type ResolvedAirportsStyle,
+} from './airportStyle.js';
+import {
   dashUniforms,
   globeTubeRadius,
   resolveRouteStyle,
@@ -45,6 +51,8 @@ export interface RouteLayerOptions extends RouteStyleOptions {
   theme?: 'light' | 'dark';
   /** Palette overrides — the same object as the `colors` option. */
   colors?: RouteDotsColors;
+  /** Source / destination airport styling (markers, pulse rings). */
+  airports?: AirportsStyleOptions;
   /** Pre-resolved styles (skips resolving `route` options again). */
   style?: ResolvedRouteStyle;
 }
@@ -68,6 +76,7 @@ export class RouteLayer {
   private options: RouteLayerOptions;
   private style: ResolvedRouteStyle;
   private theme: RouteLayerTheme;
+  private airports: ResolvedAirportsStyle;
 
   private arcs: ArcObject[] = [];
   private markers: THREE.Object3D[] = [];
@@ -82,7 +91,9 @@ export class RouteLayer {
     const theme = options.theme ?? 'light';
     this.theme = ROUTE_THEMES[theme];
     this.options = { ...options, theme };
+    const palette = resolvePalette(theme, options.colors);
     this.style = options.style ?? resolveRouteStyle(theme, options, options.colors);
+    this.airports = resolveAirportsStyle(palette, options.airports);
     this.group = new THREE.Group();
     parent.add(this.group);
   }
@@ -94,6 +105,11 @@ export class RouteLayer {
   /** The resolved style currently in use (colours, lifts, angles, dashes). */
   get resolvedStyle(): ResolvedRouteStyle {
     return this.style;
+  }
+
+  /** The resolved source / destination airport styles in use. */
+  get resolvedAirports(): ResolvedAirportsStyle {
+    return this.airports;
   }
 
   /** Called once the route has fully drawn (both arcs). */
@@ -136,6 +152,7 @@ export class RouteLayer {
     this.options = merged;
     this.theme = paletteToRouteTheme(resolvePalette(theme, merged.colors));
     this.style = merged.style ?? resolveRouteStyle(theme, merged, merged.colors);
+    this.airports = resolveAirportsStyle(resolvePalette(theme, merged.colors), merged.airports);
 
     if (this.lastRoute) {
       const progress = this.arcs.map((arc) => arcProgress(arc));
@@ -249,9 +266,15 @@ export class RouteLayer {
   }
 
   private buildMarkers(origin: LatLon, dest: LatLon): void {
-    const geometry = new THREE.SphereGeometry(0.0075, 16, 16);
-    const material = new THREE.MeshBasicMaterial({ color: this.theme.marker });
-    for (const point of [origin, dest]) {
+    // One style per endpoint — the source and the destination can be told
+    // apart (colour / size) via the `airports` option.
+    const endpoints: { point: LatLon; style: ResolvedAirportEndpoint }[] = [
+      { point: origin, style: this.airports.source },
+      { point: dest, style: this.airports.destination },
+    ];
+    for (const { point, style } of endpoints) {
+      const geometry = new THREE.SphereGeometry(style.size, 16, 16);
+      const material = new THREE.MeshBasicMaterial({ color: style.color });
       const marker = new THREE.Mesh(geometry, material);
       const v = latLngToVec(point.lat, point.lng, LAYER_RADIUS.markers);
       marker.position.set(v[0], v[1], v[2]);
@@ -263,10 +286,15 @@ export class RouteLayer {
   private spawnPulses(origin: LatLon, dest: LatLon): void {
     const now = this.lastTime ?? performance.now();
     const geometry = new THREE.RingGeometry(0.008, 0.0105, 32);
-    for (const [i, point] of [origin, dest].entries()) {
+    const endpoints: { point: LatLon; style: ResolvedAirportEndpoint }[] = [
+      { point: origin, style: this.airports.source },
+      { point: dest, style: this.airports.destination },
+    ];
+    for (const [i, { point, style }] of endpoints.entries()) {
+      if (!style.ring) continue;
       for (let k = 0; k < 2; k++) {
         const material = new THREE.MeshBasicMaterial({
-          color: this.theme.ring,
+          color: style.ringColor,
           transparent: true,
           opacity: 0.5,
           side: THREE.DoubleSide,

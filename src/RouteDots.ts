@@ -38,6 +38,11 @@ import {
   type CityLabelTextStyle,
   type ResolvedCityLabelStyle,
 } from './labels/textStyle.js';
+import {
+  resolveAirportsStyle,
+  type AirportsStyleOptions,
+  type ResolvedAirportsStyle,
+} from './routes/airportStyle.js';
 import { angularDistance, DEG, greatCircleMidpoint } from './core/greatCircle.js';
 import type { TopoLand } from './core/topojson.js';
 import { resolvePalette, type RouteDotsColors, type RouteDotsPalette } from './theme.js';
@@ -98,6 +103,12 @@ export interface RouteDotsOptions {
    * text and badge colours, flat-map halo.
    */
   labels?: CityLabelTextStyle;
+  /**
+   * **Source and destination airports**: the endpoint dots, their pulse
+   * rings and the pin dots — shared defaults plus per-endpoint
+   * `source` / `destination` overrides (colour, size, ring colour / on-off).
+   */
+  airports?: AirportsStyleOptions;
   /** 3D camera effect for the flat world (perspective, tilt, depth, orbit). */
   camera3d?: FlatCamera3DOptions;
   /** Camera pan/zoom when a route is set (default true). */
@@ -240,6 +251,13 @@ export class RouteDots {
     return null;
   }
 
+  /** The resolved source / destination airport styles in use (null before mount). */
+  getAirportStyle(): ResolvedAirportsStyle | null {
+    if (this._mode === 'webgl') return this.layer?.resolvedAirports ?? null;
+    if (this._mode === 'flat') return this.flat?.activeAirports ?? null;
+    return null;
+  }
+
   /** The resolved 3D-camera settings of the flat world (null in the 3D globe). */
   getCamera3D(): ResolvedFlatCamera3D | null {
     return this._mode === 'flat' ? (this.flat?.camera3d ?? null) : null;
@@ -295,9 +313,10 @@ export class RouteDots {
           performance.now(),
         );
       }
+      const airports = resolveAirportsStyle(this.palette, this.options.airports);
       this.pins?.setPoints([
-        { name: a.name, lat: a.lat, lng: a.lng },
-        { name: b.name, lat: b.lat, lng: b.lng },
+        { name: a.name, lat: a.lat, lng: a.lng, dotColor: airports.source.color },
+        { name: b.name, lat: b.lat, lng: b.lng, dotColor: airports.destination.color },
       ]);
       // Camera tracking takes over while a route is set: idle rotation pauses.
       this.globe.setAutoRotate(false);
@@ -470,7 +489,12 @@ export class RouteDots {
       this.globe.setColors(o.colors);
       this.globe.setInteractive(o.interactive === true);
       this.globe.setAutoRotate(o.autoRotate?.enabled !== false && this.route === null);
-      this.layer?.applyStyle({ ...o.route, theme: o.theme, colors: o.colors });
+      this.layer?.applyStyle({
+        ...o.route,
+        theme: o.theme,
+        colors: o.colors,
+        airports: o.airports,
+      });
       // The plane and the city markers can be switched on/off at runtime.
       if (o.plane?.enabled === false) {
         this.plane?.dispose();
@@ -535,6 +559,7 @@ export class RouteDots {
             : { enabled: o.borders.enabled, color: o.borders.color, width: o.borders.width },
         route: o.route,
         labels: o.labels,
+        airports: o.airports,
         cities:
           o.cities === undefined
             ? undefined
@@ -636,6 +661,7 @@ export class RouteDots {
       ...o.route,
       theme: o.theme,
       colors: o.colors,
+      airports: o.airports,
     };
     this.layer = new RouteLayer(this.globe.globeGroup, layerOptions);
     this.layer.onDrawn(() => this.emit('route:drawn', this.getRoute()));
@@ -723,6 +749,7 @@ export class RouteDots {
       width: o.flat?.width ?? 1600,
       route: o.route,
       labels: o.labels,
+      airports: o.airports,
       plane: {
         ...o.flat?.plane,
         ...o.plane,

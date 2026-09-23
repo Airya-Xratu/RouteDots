@@ -67,6 +67,7 @@ Or import the ESM build from a CDN:
 | `route`       | `RouteStyleOptions`                          | see below              | Per-leg colour, opacity, lift, **curve angle**, width and **dash pattern**.           |
 | `cities`      | `CityMarkersOptions`                         | see below              | City markers: colour, period, dot size/dim, **ripple** size/thickness/growth/opacity. |
 | `labels`      | `CityLabelTextStyle`                         | see below              | City-name **text style** — font, size, weight, spacing, colours, halo.                |
+| `airports`    | `AirportsStyleOptions`                       | see below              | **Source / destination** endpoint dots + pulse rings, per endpoint.                   |
 | `plane`       | `PlaneLayerOptions & { enabled? }`           | on                     | Animated plane — **icon component**, size, colour, timing (see below).                |
 | `camera3d`    | `FlatCamera3DOptions`                        | off                    | The flat world's **3D camera effect** (perspective, tilt, yaw, depth, orbit).         |
 | `frameRoute`  | `boolean`                                    | `true`                 | Pan/zoom the camera to frame each new route.                                          |
@@ -169,6 +170,35 @@ new RouteDots(el, {
   },
 });
 // live: rd.setOptions({ labels: { fontSize: 18 } }); rd.getLabelStyle();
+```
+
+#### Airports (`airports`)
+
+The route endpoints — the **source** and the **destination** — are styled
+independently: shared defaults plus per-endpoint overrides.
+
+| Key           | Default        | Description                                       |
+| ------------- | -------------- | ------------------------------------------------- |
+| `color`       | theme `marker` | Endpoint dot colour (both).                       |
+| `size`        | `0.0075` / `5` | Dot radius — globe radii (globe) / map px (flat). |
+| `ringColor`   | theme `ring`   | One-shot pulse-ring colour when the route is set. |
+| `ring`        | `true`         | Pulse the endpoint at all.                        |
+| `source`      | —              | Overrides of any key above, for the origin only.  |
+| `destination` | —              | Overrides, for the destination only.              |
+
+The endpoint's city-name pin dot follows `color`, so the pin, the marker and
+the pulse all read as one airport.
+
+```ts
+new RouteDots(el, {
+  airports: {
+    color: '#e2e8f0',
+    source: { color: '#22c55e' }, // green: departure
+    destination: { color: '#f97316', size: 6 }, // orange, a touch bigger
+  },
+});
+// live: rd.setOptions({ airports: { destination: { ring: false } } });
+// rd.getAirportStyle(); // → { source: {…}, destination: {…} }
 ```
 
 #### Plane (`plane`)
