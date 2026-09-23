@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CD: showcase deploys to GitHub Pages** — a new `CD` workflow
+  (`.github/workflows/cd.yml`) runs on every push to `develop` (i.e. every
+  merged PR) and on manual dispatch: it builds the library, assembles a Pages
+  site from `examples/showcase/` + `dist/routedots.browser.global.js`, and
+  deploys it with `actions/deploy-pages` (the site root redirects to
+  `examples/showcase/`).
 - **Source / destination airports (`airports`)** — the route endpoints are
   now customizable per side: `color` / `size` for the dot (globe radii on the
   globe, map px on the flat map), `ringColor` / `ring` for the one-shot pulse
