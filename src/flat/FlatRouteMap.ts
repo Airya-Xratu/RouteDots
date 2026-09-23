@@ -1,23 +1,35 @@
 /**
  * FlatRouteMap — the no-WebGL fallback.
  *
- * A flat equirectangular dot map (same dot lattice as the 3D globe) with an
- * SVG overlay: two curved dashed routes (outbound bulging up, return bulging
- * down) and a small plane that repeatedly flies the outbound path. The view
- * pans/zooms to frame the route, mimicking the 3D globe's camera move.
+ * A flat equirectangular map (grey country fills with white borders, or the
+ * dot lattice of the 3D globe) with an SVG overlay: two curved dashed routes
+ * (outbound bulging up, return bulging down) and a small plane that
+ * repeatedly flies the outbound path. The view pans/zooms to frame the route,
+ * mimicking the 3D globe's camera move.
  *
  * Everything is local DOM — no WebGL, no network.
  */
 import landTopo from '../data/land-110m.js';
 import countriesTopo from '../data/countries-110m.js';
 import { buildDotGrid } from '../core/dotPattern.js';
-import { decodeBorderArcs, decodeRings, type TopoLand } from '../core/topojson.js';
+import {
+  decodeBorderArcs,
+  decodeCountryPolygons,
+  decodeRings,
+  type TopoLand,
+} from '../core/topojson.js';
 import { flatBorderPoints } from './borderPolylines.js';
-import type { LatLon } from '../types.js';
+import { flatCountryPaths } from './countryPaths.js';
+import type { LatLon, MapSurface } from '../types.js';
 
 export interface FlatTheme {
+  /** Ocean / page background. */
   bg: string;
+  /** Country fill (the `countries` surface). */
+  land: string;
+  /** Dot colour (the `dots` surface). */
   dot: string;
+  /** Country border stroke. */
   border: string;
   outbound: string;
   return: string;
@@ -27,18 +39,20 @@ export interface FlatTheme {
 
 export const FLAT_THEMES: Record<'light' | 'dark', FlatTheme> = {
   light: {
-    bg: '#ffffff',
-    dot: '#b6bcc6',
-    border: '#d4d9e0',
+    bg: '#f2f5f9',
+    land: '#c3c9d4',
+    dot: '#8b93a1',
+    border: '#ffffff',
     outbound: '#23262e',
     return: '#8b93a1',
     marker: '#23262e',
     plane: '#14161a',
   },
   dark: {
-    bg: '#10141c',
-    dot: '#3a4557',
-    border: '#2e3c56',
+    bg: '#0e131c',
+    land: '#2b3442',
+    dot: '#5b6b82',
+    border: '#ffffff',
     outbound: '#cfd8e6',
     return: '#5b6b82',
     marker: '#e2e8f0',
@@ -48,7 +62,12 @@ export const FLAT_THEMES: Record<'light' | 'dark', FlatTheme> = {
 
 export interface FlatRouteMapOptions {
   theme?: 'light' | 'dark';
-  /** Dot spacing in degrees (default 2). */
+  /**
+   * Map surface: grey country fills with white borders (`countries`, the
+   * default) or the dot lattice (`dots`).
+   */
+  surface?: MapSurface;
+  /** Dot spacing in degrees (`dots` surface, default 2). */
   stepDeg?: number;
   /** Replace the bundled land mask. */
   land?: TopoLand;
@@ -131,7 +150,11 @@ export class FlatRouteMap {
     this.canvas.style.width = '100%';
     this.canvas.style.height = '100%';
     this.stage.appendChild(this.canvas);
-    this.renderDots(options.stepDeg ?? 2, (options.land ?? landTopo) as TopoLand);
+    if ((options.surface ?? 'countries') === 'dots') {
+      this.renderDots(options.stepDeg ?? 2, (options.land ?? landTopo) as TopoLand);
+    } else {
+      this.renderCountries();
+    }
 
     const ns = 'http://www.w3.org/2000/svg';
     this.svg = document.createElementNS(ns, 'svg');
@@ -220,6 +243,21 @@ export class FlatRouteMap {
   /** Projects lat/lng to map pixel coordinates (equirectangular). */
   private project(p: LatLon): [number, number] {
     return [((p.lng + 180) / 360) * this.width, ((90 - p.lat) / 180) * this.height];
+  }
+
+  /** Paints the grey country fills (even-odd, so enclaves stay empty). */
+  private renderCountries(): void {
+    const ctx = this.canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, this.width, this.height);
+    ctx.fillStyle = this.theme.land;
+    for (const path of flatCountryPaths(
+      decodeCountryPolygons(countriesTopo),
+      this.width,
+      this.height,
+    )) {
+      ctx.fill(new Path2D(path), 'evenodd');
+    }
   }
 
   private renderDots(stepDeg: number, topo: TopoLand): void {

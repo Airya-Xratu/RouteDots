@@ -7,11 +7,15 @@ type Hooks = {
     readPixel: (x: number, y: number) => [number, number, number, number];
     setView: (v: { lat: number; lng: number; altitude: number }, ms?: number) => void;
     getCameraState: () => { lat: number; lng: number; altitude: number };
-    borders: { segmentCount: number } | null;
+    borders: {
+      segmentCount: number;
+      lines: { material: { color: { getHexString: () => string } } };
+    } | null;
+    countries: { triangleCount: number } | null;
   } | null;
 };
 
-test('dot globe renders in WebGL and tweens the camera', async ({ page }) => {
+test('the map renders in WebGL and tweens the camera', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => {
@@ -31,9 +35,9 @@ test('dot globe renders in WebGL and tweens the camera', async ({ page }) => {
     { timeout: 30_000 },
   );
 
-  // Centre of the frame should be the globe surface with real alpha, showing
-  // both the bright ocean base and land dots (scan a patch so a single dot /
-  // antialiasing can't flake the check against the dot lattice).
+  // Centre of the frame should be opaque map surface, and a wide patch around
+  // it should hold both the grey country fills and the lighter ocean / white
+  // borders (a wide patch so antialiasing or a single border can't flake it).
   const center = await page.evaluate(() =>
     (window as unknown as Hooks).__globe!.readPixel(640, 400),
   );
@@ -47,7 +51,7 @@ test('dot globe renders in WebGL and tweens the camera', async ({ page }) => {
     const ctx = copy.getContext('2d');
     if (!ctx) return null;
     ctx.drawImage(src, 0, 0);
-    const half = 30;
+    const half = 200;
     const cx = Math.floor(src.width / 2);
     const cy = Math.floor(src.height / 2);
     const img = ctx.getImageData(cx - half, cy - half, half * 2, half * 2).data;
@@ -61,18 +65,29 @@ test('dot globe renders in WebGL and tweens the camera', async ({ page }) => {
     return { minR, maxR };
   });
   expect(patch).not.toBeNull();
-  expect(patch!.maxR).toBeGreaterThan(180); // bright ocean base
-  expect(patch!.minR).toBeLessThan(180); // land dots
+  expect(patch!.maxR).toBeGreaterThan(235); // ocean / white borders
+  expect(patch!.minR).toBeLessThan(220); // grey country fills
 
   // A far corner should be transparent page background.
   const corner = await page.evaluate(() => (window as unknown as Hooks).__globe!.readPixel(4, 4));
   expect(corner[3]).toBeLessThan(40);
 
-  // Country borders are drawn as a single LineSegments layer.
-  const borderSegments = await page.evaluate(
-    () => (window as unknown as Hooks).__globe?.borders?.segmentCount ?? 0,
+  // Grey country fills are triangulated once into a single mesh.
+  const triangles = await page.evaluate(
+    () => (window as unknown as Hooks).__globe?.countries?.triangleCount ?? 0,
   );
-  expect(borderSegments).toBeGreaterThan(5000);
+  expect(triangles).toBeGreaterThan(10_000);
+
+  // Country borders are drawn as a single white LineSegments layer.
+  const borders = await page.evaluate(() => {
+    const layer = (window as unknown as Hooks).__globe?.borders;
+    return layer
+      ? { segments: layer.segmentCount, color: layer.lines.material.color.getHexString() }
+      : null;
+  });
+  expect(borders).not.toBeNull();
+  expect(borders!.segments).toBeGreaterThan(5000);
+  expect(borders!.color).toBe('ffffff');
 
   // Camera tween: animate to a new view and verify the rig lands there.
   await page.evaluate(() =>

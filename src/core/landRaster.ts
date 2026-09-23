@@ -31,8 +31,10 @@ interface Edge {
  * Rasterizes land polygons onto a regular lat/lng grid using the classic
  * even-odd (parity) scanline fill.
  *
- * Polygons are assumed to be antimeridian-safe (world-atlas guarantees this:
- * landmasses crossing ±180° are split into multiple polygons).
+ * Polygons are assumed to be antimeridian-safe and *disjoint*: the even-odd
+ * parity counts every ring edge once, so shared borders (as in the countries
+ * topology) would cancel out. Feed it `decodeRings(land)`, not
+ * `decodeCountryPolygons(countries)`.
  */
 export function rasterizeLand(polygons: PolygonRings[], resDeg: number): LandGrid {
   if (resDeg <= 0 || resDeg > 5) {

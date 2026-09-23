@@ -13,9 +13,10 @@
 export const VERSION = '0.1.0';
 
 // Shared domain types
-export type { City, LatLon } from './types.js';
+export type { City, LatLon, MapSurface } from './types.js';
 
 // Pure geo core
+export * from './core/antimeridian.js';
 export * from './core/topojson.js';
 export * from './core/landRaster.js';
 export * from './core/dotPattern.js';
@@ -23,7 +24,9 @@ export * from './core/greatCircle.js';
 
 // Globe renderer (three.js)
 export * from './globe/cameraRig.js';
+export * from './globe/layerRadii.js';
 export * from './globe/dotTexture.js';
+export * from './globe/countrySurface.js';
 export * from './globe/atmosphere.js';
 export * from './globe/BordersLayer.js';
 export * from './globe/GlobeRenderer.js';
@@ -41,6 +44,7 @@ export * from './routes/PlaneLayer.js';
 
 // No-WebGL flat fallback
 export * from './flat/borderPolylines.js';
+export * from './flat/countryPaths.js';
 export * from './flat/FlatRouteMap.js';
 
 // Public API

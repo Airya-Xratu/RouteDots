@@ -29,12 +29,17 @@ import { FlatRouteMap, type FlatRouteMapOptions } from './flat/FlatRouteMap.js';
 import { angularDistance, DEG, greatCircleMidpoint } from './core/greatCircle.js';
 import type { TopoLand } from './core/topojson.js';
 import { CITIES, resolveCity, type CityRef } from './cities.js';
-import type { City, LatLon } from './types.js';
+import type { City, LatLon, MapSurface } from './types.js';
 
 export type RouteDotsMode = 'webgl' | 'flat';
 
 export interface RouteDotsOptions {
   theme?: 'light' | 'dark';
+  /**
+   * Map surface: grey country shapes with white borders (`countries`, the
+   * default) or the classic dot lattice (`dots`).
+   */
+  surface?: MapSurface;
   /** Override individual globe colours (WebGL mode). */
   colors?: Partial<GlobeThemeColors>;
   /** Initial camera view (WebGL mode). */
@@ -59,7 +64,7 @@ export interface RouteDotsOptions {
   /** Replace the bundled land mask. */
   land?: TopoLand;
   /**
-   * Country border lines (default enabled).
+   * Country border lines (default enabled, white).
    * `color` applies to both modes; `opacity` is the globe line opacity,
    * `width` the flat-map stroke width in px.
    */
@@ -264,6 +269,7 @@ export class RouteDots {
     const o = this.options;
     const globeOptions: GlobeRendererOptions = {
       theme: o.theme,
+      surface: o.surface,
       colors: o.colors,
       view: o.view,
       autoRotate: o.autoRotate,
@@ -367,6 +373,7 @@ export class RouteDots {
     const o = this.options;
     const flatOptions: FlatRouteMapOptions = {
       theme: o.theme,
+      surface: o.flat?.surface ?? o.surface,
       stepDeg: o.flat?.stepDeg ?? o.texture?.stepDeg,
       width: o.flat?.width ?? 1600,
       flightMs: o.flat?.flightMs ?? o.plane?.flightMs,

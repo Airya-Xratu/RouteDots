@@ -34,18 +34,38 @@ test('flat fallback draws both routes and flies the plane', async ({ page }) => 
   expect(counts.markers).toBe(2);
   expect(counts.dashed).toBe(true);
 
-  // Country borders render as hairline SVG polylines beneath the routes.
+  // Country borders render as hairline white SVG polylines beneath the routes.
   const borders = await page.evaluate(() => {
     const polylines = Array.from(document.querySelectorAll('svg polyline'));
     return {
       count: polylines.length,
       width: polylines[0]?.getAttribute('stroke-width'),
+      color: polylines[0]?.getAttribute('stroke'),
       filled: polylines.some((p) => p.getAttribute('fill') !== 'none'),
     };
   });
   expect(borders.count).toBeGreaterThan(500);
   expect(borders.width).toBe('1');
+  expect(borders.color).toBe('#ffffff');
   expect(borders.filled).toBe(false);
+
+  // The canvas paints grey country fills, leaving the ocean untouched
+  // (equirectangular: x = (lng + 180) / 360 · w, y = (90 − lat) / 180 · h).
+  const surface = await page.evaluate(() => {
+    const canvas = document.querySelector('canvas');
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return null;
+    const at = (lng: number, lat: number): number[] => {
+      const x = Math.round(((lng + 180) / 360) * canvas.width);
+      const y = Math.round(((90 - lat) / 180) * canvas.height);
+      return Array.from(ctx.getImageData(x, y, 1, 1).data);
+    };
+    return { paris: at(2, 47), atlantic: at(-40, 30) };
+  });
+  expect(surface).not.toBeNull();
+  expect(surface!.paris[3]).toBe(255); // filled
+  expect(surface!.paris[0]).toBeLessThan(220); // grey, not the white border
+  expect(surface!.atlantic[3]).toBe(0); // ocean stays transparent
 
   // Named endpoints render city-name labels.
   const labels = await page.evaluate(() =>
