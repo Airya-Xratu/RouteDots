@@ -23,6 +23,16 @@ and a flat 2D fallback for browsers without WebGL.
   different lifts, so the "there and back" is readable at a glance.
 - ✈️ **A plane that flies your route.** A small airliner repeats the outbound
   arc on an interval, oriented along the track.
+- 🎥 **The globe follows the plane.** While a route is set, idle rotation
+  pauses and the camera eases back toward the plane whenever it leaves the
+  visible disc — manual drags and explicit `setView` calls always win.
+- 📍 **City-name pins at each end.** Both endpoints carry a labelled pin badge
+  that sticks to the globe as it rotates, and fades out on the far side.
+- 🗺️ **Grey countries, white borders.** The map surface is filled country
+  shapes (antimeridian-safe, enclaves included) with hairline white borders,
+  decoded from the bundled 110m country data — on the globe and in the flat
+  fallback. Prefer the classic look? `surface: 'dots'` brings the dot lattice
+  back; the `borders` option restyles or switches the lines off.
 - 🪶 **One dependency, offline data.** Built on `three.js`; the 110m world
   land mask (Natural Earth, public domain) is bundled — no tiles, no API keys.
 - 🧯 **Graceful degradation.** Without WebGL you get the same dot map in 2D
@@ -61,8 +71,11 @@ No bundler? Use the IIFE build (three.js included):
 `setRoute` accepts IATA codes (31 cities bundled via `RouteDots.CITIES`,
 case-insensitive), `City` objects, or bare `{ lat, lng }` points.
 
-**Try it:** open [`examples/showcase/index.html`](./examples/showcase/index.html)
-— a full hero with the search form driving the globe.
+**Try it:** `npm run build && npm run dev`, then open
+[`http://localhost:5173`](http://localhost:5173) — a full airline hero where
+the search form (source/destination, swap, date, one-way/round trip,
+light/dark theme) drives the globe live. The same page also works from any
+static server once built: [`examples/showcase/index.html`](./examples/showcase/index.html).
 
 ## API in 30 seconds
 
@@ -84,6 +97,7 @@ git clone https://github.com/Airya-Xratu/RouteDots.git && cd RouteDots
 npm install
 
 npm run build       # ESM + CJS + dts + IIFE (three.js inlined)
+npm run dev         # build, then serve the showcase at http://localhost:5173
 npm test            # Vitest unit tests (pure core, rig, schedulers, model)
 npm run test:e2e    # Playwright: WebGL rendering, routes, plane, showcase
 npm run lint        # ESLint (flat)

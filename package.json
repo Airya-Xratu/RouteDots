@@ -54,6 +54,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "dev": "npm run build && node tools/serve.mjs",
     "clean": "rm -rf dist coverage .playwright"
   },
   "peerDependencies": {

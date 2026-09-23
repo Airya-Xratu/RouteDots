@@ -23,16 +23,24 @@ import {
 import type { ViewState } from './globe/cameraRig.js';
 import { RouteLayer, type RouteLayerOptions } from './routes/RouteLayer.js';
 import { PlaneLayer, type PlaneLayerOptions } from './routes/PlaneLayer.js';
+import { trackCamera } from './routes/cameraTracking.js';
+import { EndpointLabels } from './routes/EndpointLabels.js';
+import { CityMarkersLayer } from './globe/CityMarkersLayer.js';
 import { FlatRouteMap, type FlatRouteMapOptions } from './flat/FlatRouteMap.js';
 import { angularDistance, DEG, greatCircleMidpoint } from './core/greatCircle.js';
 import type { TopoLand } from './core/topojson.js';
 import { CITIES, resolveCity, type CityRef } from './cities.js';
-import type { City, LatLon } from './types.js';
+import type { City, LatLon, MapSurface } from './types.js';
 
 export type RouteDotsMode = 'webgl' | 'flat';
 
 export interface RouteDotsOptions {
   theme?: 'light' | 'dark';
+  /**
+   * Map surface: grey country shapes with white borders (`countries`, the
+   * default) or the classic dot lattice (`dots`).
+   */
+  surface?: MapSurface;
   /** Override individual globe colours (WebGL mode). */
   colors?: Partial<GlobeThemeColors>;
   /** Initial camera view (WebGL mode). */
@@ -49,6 +57,16 @@ export interface RouteDotsOptions {
     pulse?: boolean;
   };
   plane?: PlaneLayerOptions & { enabled?: boolean };
+  /**
+   * Blinking circles at every airport city (WebGL + flat fallback).
+   * `list` replaces the bundled city dataset.
+   */
+  cities?: {
+    enabled?: boolean;
+    color?: string;
+    periodMs?: number;
+    list?: readonly City[];
+  };
   /** Camera pan/zoom when a route is set (default true). */
   frameRoute?: boolean;
   /** Enable the flat no-WebGL fallback (default true). */
@@ -56,6 +74,19 @@ export interface RouteDotsOptions {
   flat?: FlatRouteMapOptions;
   /** Replace the bundled land mask. */
   land?: TopoLand;
+  /**
+   * Country border lines (default enabled, white).
+   * `color` applies to both modes; `opacity` is the globe line opacity,
+   * `width` the flat-map stroke width in px.
+   */
+  borders?: {
+    enabled?: boolean;
+    color?: string;
+    /** Globe line opacity, 0..1 (default 0.55). */
+    opacity?: number;
+    /** Flat stroke width in px (default 1). */
+    width?: number;
+  };
 }
 
 export interface RouteDotsRouteOptions {
@@ -78,6 +109,8 @@ export class RouteDots {
   private globe: GlobeRenderer | null = null;
   private layer: RouteLayer | null = null;
   private plane: PlaneLayer | null = null;
+  private pins: EndpointLabels | null = null;
+  private cityMarkers: CityMarkersLayer | null = null;
   private flat: FlatRouteMap | null = null;
 
   private readonly options: Required<Pick<RouteDotsOptions, 'theme'>> & RouteDotsOptions;
@@ -104,6 +137,11 @@ export class RouteDots {
   /** Active render mode ('webgl' | 'flat'), or null when mounting failed. */
   get mode(): RouteDotsMode | null {
     return this._mode;
+  }
+
+  /** Blinking airport-city markers (WebGL mode; null in flat mode). */
+  getCityMarkers(): CityMarkersLayer | null {
+    return this.cityMarkers;
   }
 
   /** Current route (resolved cities + trip type), if any. */
@@ -140,6 +178,12 @@ export class RouteDots {
         const outbound = spec.arcs[0]!;
         this.plane.setArc(outbound.from, outbound.to, outbound.lift, performance.now());
       }
+      this.pins?.setPoints([
+        { name: a.name, lat: a.lat, lng: a.lng },
+        { name: b.name, lat: b.lat, lng: b.lng },
+      ]);
+      // Camera tracking takes over while a route is set: idle rotation pauses.
+      this.globe.setAutoRotate(false);
       if (this.options.frameRoute !== false) this.frameRoute(a, b);
     } else if (this._mode === 'flat' && this.flat) {
       this.flat.setRoute(a, b, { roundTrip });
@@ -153,7 +197,25 @@ export class RouteDots {
     this.route = null;
     if (this._mode === 'webgl' && this.layer) this.layer.clear();
     this.plane?.clear();
+    this.pins?.clear();
+    // Camera tracking disengages with the route; idle rotation resumes.
+    if (this._mode === 'webgl' && this.globe) {
+      this.globe.setAutoRotate(this.options.autoRotate?.enabled !== false);
+    }
     this.emit('route:cleared');
+  }
+
+  /** Current camera view (WebGL mode only; null in flat mode). */
+  getCameraState(): ViewState | null {
+    if (this._mode !== 'webgl') return null;
+    return this.globe?.getCameraState() ?? null;
+  }
+
+  /** Animates the camera to a new view (WebGL mode only; a no-op in flat mode). */
+  setView(view: ViewState, durationMs?: number): void {
+    if (this._mode === 'webgl' && this.globe) {
+      this.globe.setView(view, durationMs ?? 1200);
+    }
   }
 
   /** Switches the colour theme at runtime. */
@@ -224,12 +286,21 @@ export class RouteDots {
     const o = this.options;
     const globeOptions: GlobeRendererOptions = {
       theme: o.theme,
+      surface: o.surface,
       colors: o.colors,
       view: o.view,
       autoRotate: o.autoRotate,
       interactive: o.interactive,
       texture: o.texture,
       land: o.land,
+      borders:
+        o.borders === undefined
+          ? undefined
+          : {
+              enabled: o.borders.enabled,
+              color: o.borders.color,
+              opacity: o.borders.opacity,
+            },
     };
     try {
       this.globe = new GlobeRenderer(this.container, globeOptions);
@@ -267,15 +338,59 @@ export class RouteDots {
       });
     }
 
-    this.globe.onFrame((time) => {
+    this.pins = new EndpointLabels(
+      this.container,
+      this.globe.camera,
+      () => [
+        this.globe!.renderer.domElement.clientWidth,
+        this.globe!.renderer.domElement.clientHeight,
+      ],
+      o.theme,
+    );
+
+    if (o.cities?.enabled !== false) {
+      this.cityMarkers = new CityMarkersLayer(this.globe.globeGroup, {
+        cities: o.cities?.list,
+        color: o.cities?.color ?? { ...GLOBE_THEMES[o.theme], ...o.colors }.cities,
+        periodMs: o.cities?.periodMs,
+      });
+    }
+
+    this.globe.onFrame((time, dtSec) => {
       this.layer?.update(time);
       if (this.plane) this.plane.update(time, this.globe!.camera);
+      this.cityMarkers?.update(time);
+      this.updateCameraTracking(dtSec);
+      this.pins?.update();
     });
   }
 
+  /**
+   * Camera tracking (WebGL): while a route is set and neither the user nor a
+   * view tween is in control, ease the camera back toward the plane whenever
+   * it leaves the visible disc. Pure policy lives in `cameraTracking.ts`.
+   */
+  private updateCameraTracking(dtSec: number): void {
+    if (!this.globe || !this.plane || !this.route) return;
+    const ground = this.plane.getGroundPosition();
+    if (!ground) return;
+    const step = trackCamera({
+      camera: this.globe.rig.state,
+      plane: ground,
+      dtSec,
+      routeActive: true,
+      userControlled: this.globe.isDragging || this.globe.rig.tweenActive,
+    });
+    if (step.adjusted) this.globe.rig.snapTo(step.camera);
+  }
+
   private unmountWebGL(): void {
+    this.cityMarkers?.dispose();
+    this.cityMarkers = null;
     this.plane?.dispose();
     this.plane = null;
+    this.pins?.dispose();
+    this.pins = null;
     this.layer?.dispose();
     this.layer = null;
     this.globe?.dispose();
@@ -286,11 +401,28 @@ export class RouteDots {
     const o = this.options;
     const flatOptions: FlatRouteMapOptions = {
       theme: o.theme,
+      surface: o.flat?.surface ?? o.surface,
       stepDeg: o.flat?.stepDeg ?? o.texture?.stepDeg,
       width: o.flat?.width ?? 1600,
       flightMs: o.flat?.flightMs ?? o.plane?.flightMs,
       pauseMs: o.flat?.pauseMs ?? o.plane?.pauseMs,
       land: o.land,
+      cities:
+        o.cities === undefined
+          ? undefined
+          : {
+              enabled: o.cities.enabled,
+              periodMs: o.cities.periodMs,
+              list: o.cities.list,
+            },
+      borders:
+        o.borders === undefined
+          ? undefined
+          : {
+              enabled: o.borders.enabled,
+              color: o.borders.color,
+              width: o.borders.width,
+            },
     };
     this.flat = new FlatRouteMap(this.container, flatOptions);
     this._mode = 'flat';

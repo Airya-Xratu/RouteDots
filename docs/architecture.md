@@ -21,11 +21,14 @@ src/
 ├── RouteDots.ts              Public facade: mode selection, routing, events
 ├── core/
 │   ├── topojson.ts           Minimal TopoJSON decoder → PolygonRings
+│   ├── antimeridian.ts       Seam-safe ring splitting (unwrap + clip) — pure
 │   ├── landRaster.ts         Even-odd scanline land raster → LatGrid
 │   ├── dotPattern.ts         Dot lattice over land (buildDotGrid)
 │   └── greatCircle.ts        lat/lng ↔ vec3, slerp, distances, lifted arcs
 ├── globe/                    three.js scene
 │   ├── cameraRig.ts          Point-of-view state machine (pure)
+│   ├── layerRadii.ts         Radii of the surface-hugging layer stack
+│   ├── countrySurface.ts     Country fills: earcut + conforming subdivision
 │   ├── dotTexture.ts         Dot-lattice → equirectangular canvas texture
 │   ├── atmosphere.ts         Fresnel rim glow shader
 │   └── GlobeRenderer.ts      Scene/camera/RAF loop, resize, interaction
@@ -36,9 +39,11 @@ src/
 │   ├── RouteLayer.ts         Tubes, markers, pulses; update(time)
 │   ├── PlaneScheduler.ts     Flight/pause/repeat timing — pure
 │   ├── planeSilhouette.ts    Airplane path data (pure) + canvas renderer
-│   └── PlaneLayer.ts         Sprite following the outbound arc
+│   ├── PlaneLayer.ts         Sprite following the outbound arc
+│   └── EndpointLabels.ts     DOM pin badges + projection (projectPin, pure)
 ├── flat/
-│   └── FlatRouteMap.ts       No-WebGL fallback (canvas dots + SVG routes)
+│   ├── countryPaths.ts       Country polygons → SVG path data (pure)
+│   └── FlatRouteMap.ts       No-WebGL fallback (canvas fills + SVG routes)
 └── data/
     └── land-110m.ts          Bundled world land mask (world-atlas, generated)
 ```
@@ -52,11 +57,43 @@ src/
    shared/reversed arcs, ring closing).
 3. `rasterizeLand` fills a lat/lng grid with the classic even-odd parity
    scanline (edge crossings per row, fill between pairs — holes included).
-4. `buildDotGrid` samples a regular lattice (default 1.5° → 8,431 dots, ~40 ms)
+4. `buildDotGrid` samples a regular lattice (default 2° → 4,855 dots, ~40 ms)
    and keeps the land centres.
 5. `createDotTexture` paints the dots on an equirectangular canvas (opaque
    ocean base + dots) → `CanvasTexture`. The same lattice powers the flat
    fallback, so both modes look consistent.
+6. `decodeBorderArcs` turns the bundled `countries-110m` topology (shared
+   TopoJSON arcs) into country border polylines — each border exactly once —
+   lifted to a `LineSegments` sphere just above the country fills
+   (`BordersLayer`) and drawn as SVG polylines in the flat fallback (split at
+   the antimeridian).
+
+## The country fill pipeline
+
+The default surface (`surface: 'countries'`) paints grey country shapes with
+white borders instead of the dot lattice:
+
+1. `decodeCountryPolygons` walks the `countries-110m` geometries into
+   `[outer, ...holes]` polygons, then `core/antimeridian.ts` makes every ring
+   seam-safe: longitudes are unwrapped into a continuous sequence (so a
+   ±180° duplicate — Antarctica — is _not_ a crossing) and the ring is
+   clipped against the meridian it overshoots, the clipped-off part wrapping
+   back by a full turn (Russia, Fiji).
+2. `countrySurface.triangulatePolygonOnSphere` triangulates each polygon in
+   lng/lat space with three.js' earcut (`ShapeUtils.triangulateShape`) and
+   projects every triangle onto the sphere.
+3. Triangles longer than `DEFAULT_MAX_EDGE_DEG` (6°) are recursively split at
+   their edge midpoints — midpoints are shared by neighbouring triangles, so
+   the mesh stays watertight. The 6° budget keeps a chord's sag
+   (`1 − cos 3° ≈ 0.0014`) inside the fill shell's lift (1.0025), so no
+   triangle dips under the ocean sphere.
+4. The ~15k triangles ship as one non-indexed `BufferGeometry` (one draw
+   call), double-sided because earcut's winding varies per country.
+5. The flat fallback paints the same polygons on its canvas via
+   `flat/countryPaths.ts` (one SVG path datum per polygon, filled even-odd,
+   seam copies duplicated by a map width).
+
+The dot lattice stays available as `surface: 'dots'`.
 
 ## Route geometry
 
@@ -65,10 +102,28 @@ src/
 - The rendered arc lifts the path off the surface with
   `radius(t) = 1 + lift·sin(πt)` — endpoints on the surface, peak at the
   midpoint (the airline-map "bulge").
-- Round trips: `outboundLift` 0.18 vs `returnLift` 0.34. Same great circle,
+- Round trips: `outboundLift` 0.10 vs `returnLift` 0.20. Same great circle,
   different lift ⇒ two non-overlapping curves that read as "there and back".
 - `GreatCircleCurve` evaluates the same math directly (no sampled arrays) and
-  feeds `TubeGeometry(128 segments, radius 0.0035)`.
+  feeds `TubeGeometry(128 segments, radius 0.0015)`.
+
+## Endpoint pin badges
+
+`EndpointLabels` overlays DOM pin badges (pill + stem + dot) at the route
+endpoints. `projectPin(v, camera, w, h)` is pure math — world point → camera
+(view) space → projection matrix — and returns NDC-derived container pixels
+plus a `visible` flag. Two gotchas baked in:
+
+- `Vector3.applyMatrix4` already performs the homogeneous divide, so the
+  result is NDC directly — dividing again (by clip.z or clip.w) skews every
+  off-centre position by the near/far-plane terms.
+- Visibility is a facing test `dot(anchorDir, cameraDir) ≥ 0.12`, so a badge
+  fades just before its anchor reaches the limb rather than floating in empty
+  space.
+
+The overlay layer is `pointer-events: none` and theme-scoped (`.rd-pin-light`
+/ `.rd-pin-dark` CSS variables); the flat fallback renders the names as haloed
+SVG `<text>` instead (same `FlatRoutePoint.name` input).
 
 ## The arc shader (tube UVs)
 
@@ -95,13 +150,30 @@ route's great-circle midpoint at an altitude that grows with route length
 (1.35 + dist°/90, clamped 1.4–2.4) — this is the "globe moves to the
 destination" behaviour.
 
+While a route is set, horizon-aware tracking (`cameraTracking.ts`, pure)
+keeps the plane in view: idle auto-rotation pauses, and whenever the plane's
+ground position leaves the visible disc (horizon for the camera altitude
+minus a 5° margin) the camera eases back toward it by `1 − e^(−k·dt)`.
+Manual drags and `setView` tweens always win; `clearRoute` stands the
+tracker down and resumes idle rotation.
+
 ## The plane
 
 `PlaneScheduler` (pure) maps time → progress: fly `flightMs`, pause `pauseMs`,
-repeat. `PlaneLayer` positions a sprite on the outbound arc
-(`slerp` + `lift + clearance`), and orients it by projecting a short tangent
-into camera space (`rotation = atan2(dy, dx) - 90°`). The sprite is hidden
-during the pause phase and behind the globe (depth test on).
+repeat. The schedule stays linear; `PlaneLayer` eases the _motion_ with
+`easeInOutCubic` so the plane lifts off and lands gently, positions the sprite
+on the outbound arc (`slerp` + `lift + clearance`), and orients it by
+projecting a short tangent into camera space
+(`rotation = atan2(dy, dx) - 90°`). The sprite is hidden during the pause
+phase and behind the globe (depth test on).
+
+## Route layering
+
+Tubes are drawn depth-independent (no depth write) in explicit painter order:
+outbound `renderOrder` 1, return 2 — so "there and back" stays readable where
+the arcs overlap — pulses 3, plane sprite 4. The shared route shader adds a
+soft limb fade near the globe's visible edge so arcs melt into the surface
+instead of hard-clipping at the silhouette.
 
 ## Flat fallback
 

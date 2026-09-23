@@ -53,32 +53,36 @@ Or import the ESM build from a CDN:
 
 ### `new RouteDots(container: HTMLElement, options?: RouteDotsOptions)`
 
-| Option        | Type                                                                              | Default                                  | Description                                            |
-| ------------- | --------------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------ |
-| `theme`       | `'light' \| 'dark'`                                                               | `'light'`                                | Colour theme (globe, dots, arcs, markers, atmosphere). |
-| `view`        | `{ lat, lng, altitude }`                                                          | `{ 30, 45, 1.9 }`                        | Initial camera view (altitude = globe radii, 1.05–4).  |
-| `autoRotate`  | `{ enabled?, speed? }`                                                            | on, 0.4°/s                               | Gentle idle rotation.                                  |
-| `interactive` | `boolean`                                                                         | `false`                                  | Allow pointer drag + wheel zoom.                       |
-| `texture`     | `{ stepDeg?, resDeg?, dotSizeDeg?, width? }`                                      | 1.5 / auto / 0.45 / 2048                 | Dot lattice & texture options.                         |
-| `route`       | `{ outboundLift?, returnLift?, arcRadius?, drawDurationMs?, staggerMs?, pulse? }` | 0.18 / 0.34 / 0.0035 / 1100 / 350 / true | Arc geometry & animation.                              |
-| `plane`       | `PlaneLayerOptions & { enabled? }`                                                | on                                       | Animated plane (see below).                            |
-| `frameRoute`  | `boolean`                                                                         | `true`                                   | Pan/zoom the camera to frame each new route.           |
-| `fallback`    | `{ enabled? }`                                                                    | `true`                                   | Use the flat map when WebGL is unavailable.            |
-| `flat`        | `FlatRouteMapOptions`                                                             | —                                        | Options for the flat fallback.                         |
-| `land`        | `TopoLand`                                                                        | bundled 110m mask                        | Replace the land mask.                                 |
+| Option        | Type                                                                              | Default                                  | Description                                                              |
+| ------------- | --------------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------ |
+| `theme`       | `'light' \| 'dark'`                                                               | `'light'`                                | Colour theme (ocean, countries, dots, arcs, markers, atmosphere).        |
+| `surface`     | `'countries' \| 'dots'`                                                           | `'countries'`                            | Map surface: grey country fills with white borders, or the dot lattice.  |
+| `view`        | `{ lat, lng, altitude }`                                                          | `{ 30, 45, 1.9 }`                        | Initial camera view (altitude = globe radii, 1.05–4).                    |
+| `autoRotate`  | `{ enabled?, speed? }`                                                            | on, 0.4°/s                               | Gentle idle rotation.                                                    |
+| `interactive` | `boolean`                                                                         | `false`                                  | Allow pointer drag + wheel zoom.                                         |
+| `texture`     | `{ stepDeg?, resDeg?, dotSizeDeg?, width? }`                                      | 2 / auto / 0.62 / 2048                   | Dot lattice & texture options.                                           |
+| `borders`     | `{ enabled?, color?, opacity?, width? }`                                          | on, white, 1 / 1 px                      | Country border lines. `opacity` = globe, `width` = flat-map stroke (px). |
+| `route`       | `{ outboundLift?, returnLift?, arcRadius?, drawDurationMs?, staggerMs?, pulse? }` | 0.10 / 0.20 / 0.0015 / 1100 / 350 / true | Arc geometry & animation.                                                |
+| `plane`       | `PlaneLayerOptions & { enabled? }`                                                | on                                       | Animated plane (see below).                                              |
+| `frameRoute`  | `boolean`                                                                         | `true`                                   | Pan/zoom the camera to frame each new route.                             |
+| `fallback`    | `{ enabled? }`                                                                    | `true`                                   | Use the flat map when WebGL is unavailable.                              |
+| `flat`        | `FlatRouteMapOptions`                                                             | —                                        | Options for the flat fallback.                                           |
+| `land`        | `TopoLand`                                                                        | bundled 110m mask                        | Replace the land mask.                                                   |
 
 `PlaneLayerOptions`: `{ size?, color?, clearance?, flightMs?, pauseMs?, startDelayMs? }`.
 
 ### Methods
 
-| Method                                        | Description                                                                              |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `setRoute(from, to, { roundTrip? }): boolean` | Draws the route (arc(s) + markers + pulse + plane), pans the camera to frame it.         |
-| `getRoute(): RouteDotsRouteInfo \| null`      | Resolved `{ from, to, roundTrip }` of the current route.                                 |
-| `clearRoute()`                                | Removes arcs/markers/pulses/plane.                                                       |
-| `setTheme('light' \| 'dark')`                 | Switches theme at runtime (re-renders the current route).                                |
-| `resize()`                                    | Re-fits the renderer to the container (also handled automatically via `ResizeObserver`). |
-| `dispose()`                                   | Tears everything down (RAF, listeners, GPU resources, DOM).                              |
+| Method                                        | Description                                                                                       |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `setRoute(from, to, { roundTrip? }): boolean` | Draws the route (arc(s) + markers + pulse + plane), pans the camera to frame it.                  |
+| `getRoute(): RouteDotsRouteInfo \| null`      | Resolved `{ from, to, roundTrip }` of the current route.                                          |
+| `clearRoute()`                                | Removes arcs/markers/pulses/plane.                                                                |
+| `getCameraState(): ViewState \| null`         | Current camera `{ lat, lng, altitude }` (WebGL mode; `null` in flat mode).                        |
+| `setView(view, durationMs?)`                  | Animates the camera to a view (WebGL mode; no-op in flat mode). Overrides tracking while it runs. |
+| `setTheme('light' \| 'dark')`                 | Switches theme at runtime (re-renders the current route).                                         |
+| `resize()`                                    | Re-fits the renderer to the container (also handled automatically via `ResizeObserver`).          |
+| `dispose()`                                   | Tears everything down (RAF, listeners, GPU resources, DOM).                                       |
 
 ### Events
 
@@ -140,7 +144,7 @@ changes, `dispose()` on unmount.
 ## Behaviour notes
 
 - **Outbound/return separation.** Round trips render two arcs with different
-  lifts (`outboundLift` 0.18 vs `returnLift` 0.34 of the globe radius). Both
+  lifts (`outboundLift` 0.10 vs `returnLift` 0.20 of the globe radius). Both
   follow the `1 + lift·sin(πt)` great-circle profile, so they share endpoints
   but never overlap.
 - **Frame routing.** On `setRoute`, the camera tweens (1.4 s, ease-out) to the
@@ -153,6 +157,11 @@ changes, `dispose()` on unmount.
 - **Flat fallback.** Without WebGL, `FlatRouteMap` renders the same dot
   lattice as a 2D equirectangular map with curved SVG routes (outbound up,
   return down) and an animated plane — the public API is unchanged.
+- **Endpoint pins.** In WebGL mode each endpoint gets a DOM pin badge
+  (pill + stem + dot, `.rd-pin-*` classes) that is re-projected every frame
+  and fades out when it rotates to the far hemisphere. In flat mode the city
+  name renders as a haloed SVG label next to the marker. Badge colours follow
+  the active theme.
 
 ## Customisation recipes
 

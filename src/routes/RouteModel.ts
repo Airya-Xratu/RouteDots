@@ -29,16 +29,18 @@ export interface RouteSpec {
 
 export interface BuildRouteOptions {
   roundTrip?: boolean;
-  /** Outbound lift (default 0.18). */
+  /** Outbound lift (default 0.10). */
   outboundLift?: number;
-  /** Return lift (default 0.34) — must differ from the outbound lift. */
+  /** Return lift (default 0.20) — must differ from the outbound lift. */
   returnLift?: number;
 }
 
 /** Default outbound lift. */
-export const DEFAULT_OUTBOUND_LIFT = 0.18;
+export const DEFAULT_OUTBOUND_LIFT = 0.1;
 /** Default return lift (visibly higher than outbound). */
-export const DEFAULT_RETURN_LIFT = 0.34;
+export const DEFAULT_RETURN_LIFT = 0.2;
+/** Default arc tube radius in globe units. */
+export const DEFAULT_ARC_RADIUS = 0.0015;
 
 const SAME_POINT_EPS = 0.01;
 

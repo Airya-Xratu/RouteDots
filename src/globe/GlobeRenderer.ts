@@ -12,23 +12,55 @@ import { decodeRings, type TopoLand } from '../core/topojson.js';
 import { CameraRig, type ViewState } from './cameraRig.js';
 import { createDotTexture } from './dotTexture.js';
 import { createAtmosphere } from './atmosphere.js';
+import { BordersLayer } from './BordersLayer.js';
+import type { MapSurface } from '../types.js';
+import { CountrySurfaceLayer } from './countrySurface.js';
+import { LAYER_RADIUS } from './layerRadii.js';
+
+/** Which map surface the globe wears (see {@link MapSurface}). */
+export type GlobeSurface = MapSurface;
 
 export interface GlobeThemeColors {
   /** Base sphere colour (ocean). */
   globe: string;
-  /** Dot colour (land). */
+  /** Country fill colour (the `countries` surface). */
+  countries: string;
+  /** Dot colour (the legacy `dots` surface). */
   dots: string;
+  /** Country border line colour. */
+  borders: string;
+  /** Airport-city marker colour. */
+  cities: string;
   /** Atmosphere halo colour. */
   atmosphere: string;
 }
 
 export const GLOBE_THEMES: Record<'light' | 'dark', GlobeThemeColors> = {
-  light: { globe: '#ffffff', dots: '#8b93a1', atmosphere: '#93a7c4' },
-  dark: { globe: '#10141c', dots: '#5b6b82', atmosphere: '#3d5f8f' },
+  light: {
+    globe: '#f2f5f9',
+    countries: '#c3c9d4',
+    dots: '#8b93a1',
+    borders: '#ffffff',
+    cities: '#39414e',
+    atmosphere: '#93a7c4',
+  },
+  dark: {
+    globe: '#0e131c',
+    countries: '#2b3442',
+    dots: '#5b6b82',
+    borders: '#ffffff',
+    cities: '#d7e0ee',
+    atmosphere: '#3d5f8f',
+  },
 };
 
 export interface GlobeRendererOptions {
   theme?: 'light' | 'dark';
+  /**
+   * Map surface: grey country fills with white borders (`countries`, the
+   * default) or the legacy dot lattice (`dots`).
+   */
+  surface?: GlobeSurface;
   /** Override individual colours. */
   colors?: Partial<GlobeThemeColors>;
   /** Texture / dot lattice options. */
@@ -52,6 +84,14 @@ export interface GlobeRendererOptions {
   interactive?: boolean;
   /** Replace the bundled land mask. */
   land?: TopoLand;
+  /** Country border lines (default enabled). */
+  borders?: {
+    enabled?: boolean;
+    /** Line colour (default: the theme's border colour). */
+    color?: string;
+    /** Line opacity, 0..1 (default 0.55). */
+    opacity?: number;
+  };
 }
 
 /** True when the current environment can create a WebGL context. */
@@ -71,11 +111,15 @@ export class GlobeRenderer {
   /** Everything attached here rotates/positions with the globe. */
   readonly globeGroup: THREE.Group;
   readonly rig: CameraRig;
+  /** Country border lines (null when borders are disabled). */
+  readonly borders: BordersLayer | null;
+  /** Grey country fills (null when the `dots` surface is used). */
+  readonly countries: CountrySurfaceLayer | null;
 
   private readonly container: HTMLElement;
   private readonly globeMesh: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
   private readonly atmosphere: THREE.Mesh;
-  private readonly dotTexture: THREE.CanvasTexture;
+  private readonly dotTexture: THREE.CanvasTexture | null;
   private readonly frameCallbacks = new Set<(time: number, dt: number) => void>();
   private readonly onResize: () => void;
   private resizeObserver: ResizeObserver | null = null;
@@ -105,22 +149,28 @@ export class GlobeRenderer {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(options.fov ?? 42, 1, 0.05, 100);
 
-    // Globe with dot-map texture. An unlit material keeps the flat, minimal
-    // aesthetic (the texture carries both ocean and dot colours) and makes
-    // rendering deterministic across GPU vendors.
-    const topo = options.land ?? (landTopo as TopoLand);
-    const pattern = buildDotGrid(decodeRings(topo), {
-      stepDeg: options.texture?.stepDeg,
-      resDeg: options.texture?.resDeg,
-    });
-    this.dotTexture = createDotTexture(pattern, {
-      bgColor: themeColors.globe,
-      dotColor: themeColors.dots,
-      dotSizeDeg: options.texture?.dotSizeDeg,
-      width: options.texture?.width,
-    }).texture;
+    // Ocean sphere + surface layer. An unlit material keeps the flat, minimal
+    // aesthetic (the surface carries the land colours) and makes rendering
+    // deterministic across GPU vendors.
+    const surface = options.surface ?? 'countries';
+    if (surface === 'dots') {
+      const topo = options.land ?? (landTopo as TopoLand);
+      const pattern = buildDotGrid(decodeRings(topo), {
+        stepDeg: options.texture?.stepDeg,
+        resDeg: options.texture?.resDeg,
+      });
+      // The dot texture paints its own ocean base, so the material stays white.
+      this.dotTexture = createDotTexture(pattern, {
+        bgColor: themeColors.globe,
+        dotColor: themeColors.dots,
+        dotSizeDeg: options.texture?.dotSizeDeg,
+        width: options.texture?.width,
+      }).texture;
+    } else {
+      this.dotTexture = null;
+    }
     const globeMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
+      color: this.dotTexture ? 0xffffff : new THREE.Color(themeColors.globe),
       map: this.dotTexture,
     });
     this.globeMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 96), globeMaterial);
@@ -130,6 +180,20 @@ export class GlobeRenderer {
 
     this.atmosphere = createAtmosphere({ color: themeColors.atmosphere });
     this.scene.add(this.atmosphere);
+
+    this.countries =
+      surface === 'countries'
+        ? new CountrySurfaceLayer(this.globeGroup, { color: themeColors.countries })
+        : null;
+
+    this.borders =
+      options.borders?.enabled === false
+        ? null
+        : new BordersLayer(this.globeGroup, {
+            color: options.borders?.color ?? themeColors.borders,
+            opacity: options.borders?.opacity,
+            radius: LAYER_RADIUS.borders,
+          });
 
     this.rig = new CameraRig({
       initial: view,
@@ -153,6 +217,11 @@ export class GlobeRenderer {
 
   get isReady(): boolean {
     return this.ready;
+  }
+
+  /** True while the user is actively dragging the globe (interaction wins over tracking). */
+  get isDragging(): boolean {
+    return this.pointerDown;
   }
 
   /** Registers a per-frame callback; returns an unsubscribe function. */
@@ -200,11 +269,13 @@ export class GlobeRenderer {
     cancelAnimationFrame(this.rafId);
     this.resizeObserver?.disconnect();
     this.frameCallbacks.clear();
+    this.borders?.dispose();
+    this.countries?.dispose();
     this.globeMesh.geometry.dispose();
     this.globeMesh.material.dispose();
     (this.atmosphere.material as THREE.Material).dispose();
     this.atmosphere.geometry.dispose();
-    this.dotTexture.dispose();
+    this.dotTexture?.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

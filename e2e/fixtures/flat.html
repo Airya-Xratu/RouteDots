@@ -23,8 +23,8 @@
       window.__state = { ready: false, error: null };
       try {
         const { FlatRouteMap } = window.RouteDots;
-        const LHR = { lat: 51.507, lng: -0.128 };
-        const DXB = { lat: 25.204, lng: 55.271 };
+        const LHR = { lat: 51.507, lng: -0.128, name: 'London' };
+        const DXB = { lat: 25.204, lng: 55.271, name: 'Dubai' };
         const flat = new FlatRouteMap(document.getElementById('map'), { theme: 'light' });
         flat.setRoute(LHR, DXB, { roundTrip: true });
         window.__state.ready = true;
