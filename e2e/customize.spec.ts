@@ -209,12 +209,15 @@ test('flat world: colours, dashes, curve angles, ripple, plane icon and 3D camer
       world: world.style.transform,
       routes: routes.style.transform,
       borders: borders.style.transform,
+      cities: (document.querySelector('[data-rd-layer="cities"]') as HTMLElement).style.transform,
     };
   });
   expect(camera.perspective).toBe('900px');
-  expect(camera.world).toBe('rotateX(40.00deg) rotateZ(-12.00deg)');
-  expect(camera.routes).toBe('translateZ(90.00px)');
-  expect(camera.borders).toBe('translateZ(27.00px)');
+  // (The CSSOM hands transforms back without trailing zeros.)
+  expect(camera.world).toBe('rotateX(40deg) rotateZ(-12deg)');
+  expect(camera.routes).toBe('translateZ(90px)');
+  expect(camera.borders).toBe('translateZ(27px)');
+  expect(camera.cities).toBe('translateZ(49.5px)');
 
   // Dragging orbits the camera (tilt / yaw).
   const before = await page.evaluate(() => (window as unknown as Hooks).__rd!.flat.getCamera3D()!);
@@ -270,7 +273,10 @@ test('3D globe: resolved styles report the customisation, and live updates apply
       outbound: style.outbound,
       back: style.return,
       cities: globe.getCityStyle(),
-      markers: globe.getCityMarkers(),
+      markers: (() => {
+        const layer = globe.getCityMarkers();
+        return layer ? { count: layer.count, ripple: layer.resolvedStyle.ripple } : null;
+      })(),
       options: globe.getOptions(),
     };
   });
@@ -282,7 +288,7 @@ test('3D globe: resolved styles report the customisation, and live updates apply
   expect(resolved.cities?.ripple.periodMs).toBe(900);
   expect(resolved.cities?.ripple.grow).toBe(5);
   expect(resolved.markers?.count).toBe(31);
-  expect(resolved.markers?.resolvedStyle.ripple.periodMs).toBe(900);
+  expect(resolved.markers?.ripple.periodMs).toBe(900);
   expect((resolved.options.route as { outbound: { angle: number } }).outbound.angle).toBe(30);
 
   // ── setColors / setOptions restyle the live scene ────────────────────────
