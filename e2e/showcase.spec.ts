@@ -6,6 +6,7 @@ type Hooks = {
   __rd: {
     getRoute: () => { from: { code: string }; to: { code: string }; roundTrip: boolean } | null;
     setRoute: (f: string, t: string, o?: { roundTrip?: boolean }) => boolean;
+    getCityMarkers: () => { count: number } | null;
     mode: string | null;
   } | null;
 };
@@ -37,6 +38,12 @@ test('showcase hero: form drives the globe route', async ({ page }) => {
   expect(route?.to.code).toBe('DXB');
   expect(route?.roundTrip).toBe(true);
   expect(await page.textContent('#hint')).toContain('London → Dubai');
+
+  // Every bundled airport city carries a blinking marker layer.
+  const cityCount = await page.evaluate(
+    () => (window as unknown as Hooks).__rd!.getCityMarkers()?.count ?? 0,
+  );
+  expect(cityCount).toBe(31);
 
   // Pin badges show the city names at both endpoints.
   await page.waitForFunction(

@@ -13,12 +13,10 @@
 import { openRing, ringLngRange } from '../core/antimeridian.js';
 import type { PolygonRings, Ring } from '../core/topojson.js';
 import { projectDotToPx } from '../globe/dotTexture.js';
+import { roundPixel } from './borderPolylines.js';
 
 /** Longitudes this close to ±180° count as "on the seam". */
 const SEAM_EPS = 1e-6;
-
-/** Rounds a pixel coordinate to 2 decimals to keep the path data light. */
-const round2 = (v: number): number => Math.round(v * 100) / 100;
 
 /** One closed subpath (`M…L…Z`) for a ring, shifted horizontally by `shiftPx`. */
 function ringSubpath(ring: Ring, width: number, height: number, shiftPx: number): string {
@@ -26,7 +24,7 @@ function ringSubpath(ring: Ring, width: number, height: number, shiftPx: number)
   if (points.length < 3) return '';
   const commands = points.map(([lng, lat], i) => {
     const [x, y] = projectDotToPx(lat, lng, width, height);
-    return `${i === 0 ? 'M' : 'L'}${round2(x + shiftPx)},${round2(y)}`;
+    return `${i === 0 ? 'M' : 'L'}${roundPixel(x + shiftPx)},${roundPixel(y)}`;
   });
   return `${commands.join('')}Z`;
 }

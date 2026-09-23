@@ -25,7 +25,9 @@ test('flat fallback draws both routes and flies the plane', async ({ page }) => 
     return {
       paths: routes.length,
       widths: Array.from(routes).map((p) => p.getAttribute('stroke-width')),
-      markers: svg?.querySelectorAll('circle').length ?? 0,
+      markers: svg?.querySelectorAll('circle:not([class])').length ?? 0,
+      cityDots: svg?.querySelectorAll('circle.rd-city-dot').length ?? 0,
+      cityRings: svg?.querySelectorAll('circle.rd-city-ring').length ?? 0,
       dashed: Array.from(routes).every((p) => p.getAttribute('stroke-dasharray')?.includes(' ')),
     };
   });
@@ -33,6 +35,24 @@ test('flat fallback draws both routes and flies the plane', async ({ page }) => 
   expect(counts.widths).toEqual(['1.8', '1.4']);
   expect(counts.markers).toBe(2);
   expect(counts.dashed).toBe(true);
+
+  // Every bundled airport city blinks: a dot + an expanding pulse ring,
+  // phase-shifted so they never pulse in unison.
+  expect(counts.cityDots).toBe(31);
+  expect(counts.cityRings).toBe(31);
+  const blink = await page.evaluate(() => {
+    const dots = Array.from(document.querySelectorAll('circle.rd-city-dot'));
+    const rings = Array.from(document.querySelectorAll('circle.rd-city-ring'));
+    const delays = new Set(dots.map((d) => (d as SVGCircleElement).style.animationDelay));
+    return {
+      dot: dots[0] ? getComputedStyle(dots[0]).animationName : null,
+      ring: rings[0] ? getComputedStyle(rings[0]).animationName : null,
+      distinctDelays: delays.size,
+    };
+  });
+  expect(blink.dot).toBe('rd-city-blink');
+  expect(blink.ring).toBe('rd-city-pulse');
+  expect(blink.distinctDelays).toBeGreaterThan(20);
 
   // Country borders render as hairline white SVG polylines beneath the routes.
   const borders = await page.evaluate(() => {

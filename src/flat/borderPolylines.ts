@@ -10,7 +10,7 @@ import type { Ring } from '../core/topojson.js';
 import { projectDotToPx } from '../globe/dotTexture.js';
 
 /** Rounds a pixel coordinate to 2 decimals to keep the DOM light. */
-const round2 = (v: number): number => Math.round(v * 100) / 100;
+export const roundPixel = (v: number): number => Math.round(v * 100) / 100;
 
 /**
  * Projects border polylines to equirectangular pixel space and formats them
@@ -31,7 +31,7 @@ export function flatBorderPoints(rings: Ring[], width: number, height: number): 
     for (const [lng, lat] of ring) {
       const [x, y] = projectDotToPx(lat, lng, width, height);
       if (prevX !== null && Math.abs(x - prevX) > width / 2) flush();
-      piece.push(`${round2(x)},${round2(y)}`);
+      piece.push(`${roundPixel(x)},${roundPixel(y)}`);
       prevX = x;
     }
     flush();
