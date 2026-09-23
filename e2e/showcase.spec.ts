@@ -287,13 +287,46 @@ test('showcase studio: every customization applies live', async ({ page }) => {
   await expect.poll(layerTransform).toBe('translateZ(120px)');
 
   // Drag orbits; scrolling zooms (interactive is armed when the camera turns on).
+  // The studio applies its own state on the next animation frame, so let any
+  // frame queued by the sliders above land before measuring the gesture.
+  await page.waitForTimeout(200);
   const before = (await camera())!;
   const box = (await page.locator('#globe').boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  // Instrument the gesture: the log records every pointer event that reaches
+  // the flat world's container together with the camera yaw the library has
+  // applied by the time our (later) listener runs.
+  const surface = await page.evaluate((at) => {
+    const el = document.getElementById('globe')!;
+    const log: string[] = [];
+    (window as unknown as { __dragLog: string[] }).__dragLog = log;
+    for (const type of ['pointerdown', 'pointermove', 'pointerup'] as const) {
+      el.addEventListener(type, (event) => {
+        const pointer = event as PointerEvent;
+        const rd = (window as unknown as Hooks).__rd!;
+        log.push(`${type}(${pointer.clientX},${pointer.clientY}) yaw=${rd.getCamera3D()?.yaw}`);
+      });
+    }
+    const hit = document.elementFromPoint(at.x, at.y);
+    const rect = el.getBoundingClientRect();
+    return {
+      hit: hit ? `<${hit.tagName.toLowerCase()} class="${hit.getAttribute('class') ?? ''}">` : null,
+      rect: [rect.x, rect.y, rect.width, rect.height],
+    };
+  }, centre);
+  await page.mouse.move(centre.x, centre.y);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2 + 30, { steps: 6 });
+  await page.mouse.move(centre.x + 60, centre.y + 30, { steps: 6 });
   await page.mouse.up();
-  await expect.poll(async () => (await camera())!.yaw).toBeGreaterThan(before.yaw);
+  const dragLog = await page.evaluate(
+    () => (window as unknown as { __dragLog: string[] }).__dragLog,
+  );
+  const diagnostic = `drag from (${centre.x},${centre.y}) over ${surface.hit}; log=${JSON.stringify(
+    dragLog,
+  )}`;
+  await expect
+    .poll(async () => (await camera())!.yaw, { message: diagnostic })
+    .toBeGreaterThan(before.yaw);
   await expect.poll(async () => (await camera())!.tilt).toBeGreaterThan(before.tilt);
 
   const zoomBefore = await page.evaluate(
