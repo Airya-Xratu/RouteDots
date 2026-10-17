@@ -359,3 +359,100 @@ test('showcase studio: every customization applies live', async ({ page }) => {
 
   expect(errors, `console/page errors: ${errors.join(' | ')}`).toEqual([]);
 });
+
+test('showcase studio exports a config the library can re-import', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('console', (m) => {
+    if (m.type() === 'error') errors.push(m.text());
+  });
+
+  await openShowcase(page);
+  await page.click('#studio-toggle');
+  await expect(page.locator('#studio-config')).toBeVisible();
+
+  await page.locator('#angle-outbound').fill('22');
+  await page.locator('#color-outbound').fill('#ff0066');
+  await page.selectOption('#surface', 'dots');
+
+  const readJson = () => page.locator('#config-json').inputValue();
+  await expect.poll(async () => readJson()).toContain('"angle": 22');
+  await expect.poll(async () => readJson()).toContain('#ff0066');
+  await expect.poll(async () => readJson()).toContain('"surface": "dots"');
+
+  const config = JSON.parse(await readJson()) as {
+    version: number;
+    name?: string;
+    route: { from: string; to: string; roundTrip: boolean };
+    options: {
+      theme?: string;
+      world?: string;
+      surface?: string;
+      colors?: { outbound?: string };
+      view?: { lat: number; lng: number; altitude: number };
+      autoRotate?: { enabled: boolean; speed: number };
+      route?: { outbound?: { angle: number } };
+    };
+  };
+  expect(config.version).toBe(1);
+  expect(config.name).toBe('RouteDots showcase');
+  expect(config.route).toEqual({ from: 'LHR', to: 'DXB', roundTrip: true });
+  expect(config.options.theme).toBe('light');
+  expect(config.options.world ?? 'auto').toBe('auto');
+  expect(config.options.surface).toBe('dots');
+  expect(config.options.colors?.outbound).toBe('#ff0066');
+  expect(config.options.view).toEqual({ lat: 40, lng: 25, altitude: 1.9 });
+  expect(config.options.autoRotate).toEqual({ enabled: true, speed: 0.4 });
+  expect(config.options.route?.outbound?.angle).toBe(22);
+
+  // What the panel shows is what the library would write.
+  const fromApi = await page.evaluate(() =>
+    (
+      window as unknown as { __rd: { toConfigJSON: (meta: { name: string }) => string } }
+    ).__rd.toConfigJSON({
+      name: 'RouteDots showcase',
+    }),
+  );
+  expect(JSON.parse(fromApi)).toEqual(config);
+
+  await page.click('#config-copy');
+  await expect(page.locator('#config-status')).toContainText(/copied|copy/i);
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.click('#config-download'),
+  ]);
+  expect(download.suggestedFilename()).toBe('routedots.config.json');
+  const downloadPath = await download.path();
+  expect(downloadPath).toBeTruthy();
+  expect(JSON.parse(readFileSync(downloadPath!, 'utf8')).version).toBe(1);
+
+  await page.click('#studio-reset');
+  const routeAngle = () =>
+    page.evaluate(() => (window as unknown as Hooks).__rd!.getRouteStyle()!.outbound.angle);
+  await expect.poll(routeAngle).toBe(0);
+  await expect(page.locator('#surface')).toHaveValue('countries');
+
+  await page.setInputFiles('#config-file', {
+    name: 'routedots.config.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(config)),
+  });
+  await expect.poll(routeAngle).toBe(22);
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as Hooks).__rd!.getRouteStyle()!.outbound.color),
+    )
+    .toBe('#ff0066');
+  await expect(page.locator('#angle-outbound')).toHaveValue('22');
+  await expect(page.locator('#surface')).toHaveValue('dots');
+  await expect(page.locator('#config-status')).toContainText(/applied/i);
+
+  // A broken file must not wipe the scene.
+  await page.locator('#config-json').fill('{');
+  await page.click('#config-apply');
+  await expect(page.locator('#config-status')).toContainText(/invalid/i);
+  await expect.poll(routeAngle).toBe(22);
+
+  expect(errors, `console/page errors: ${errors.join(' | ')}`).toEqual([]);
+});

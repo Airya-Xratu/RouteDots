@@ -19,7 +19,7 @@ Pair the preview with a well-organized control panel. The controls should includ
 - Plane icon/size controls, city markers and ripple settings, endpoint labels, and airport markers.
 - Optional 3D camera settings when the flat map's 3D camera is enabled.
 
-Group controls into collapsible or clearly separated sections. Show value labels beside sliders and use examples of units. Make related per-leg settings visually distinguishable. Keep the common route and rendering controls easy to find; advanced options can be progressively disclosed. Include a reset-to-default action and a live, syntax-highlighted code panel that reflects the selected configuration, with copy feedback. Use authentic RouteDots API names such as `setRoute`, `setOptions`, `setColors`, and `setWorld` where relevant; avoid inventing API options.
+Group controls into collapsible or clearly separated sections. Show value labels beside sliders and use examples of units. Make related per-leg settings visually distinguishable. Keep the common route and rendering controls easy to find; advanced options can be progressively disclosed. Include a reset-to-default action and a live, syntax-highlighted code panel that reflects the selected configuration, with copy feedback. Include export and import of a portable JSON config (`RouteDots.fromConfig` / `applyConfig`) so a scene designed here can be dropped into a host project. Use authentic RouteDots API names such as `setRoute`, `setOptions`, `setColors`, and `setWorld` where relevant; avoid inventing API options.
 
 ## Interaction states
 

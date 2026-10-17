@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Portable config JSON** — the showcase studio's side panel exports the live
+  scene as `routedots.config.json` (edit, apply, copy, download, or import).
+  A project that depends on the library loads that file with
+  `RouteDots.fromConfig(el, config)`, `rd.applyConfig(config)` or
+  `parseRouteDotsConfig`. The document is version 1 and carries the route plus
+  every JSON-safe option; custom draw functions and land masks are omitted
+  with a warning (`src/config.ts`). `replaceOptions` replaces the option set
+  (unlike `setOptions`, which merges) so an imported scene does not keep
+  leftover keys.
 - **CD: showcase deploys to GitHub Pages** — a new `CD` workflow
   (`.github/workflows/cd.yml`) runs on every push to `develop` (i.e. every
   merged PR) and on manual dispatch: it builds the library, assembles a Pages

@@ -29,6 +29,9 @@ full `City` objects, or bare `{ lat, lng }` points. It returns `false` (and
 emits `route:invalid`) when a city can't be resolved or both endpoints are the
 same point.
 
+To design the look in the browser and load it as a file, see
+[Portable config](#portable-config).
+
 ### No-bundler usage
 
 ```html
@@ -39,6 +42,9 @@ same point.
   rd.setRoute('THR', 'DXB', { roundTrip: true });
 </script>
 ```
+
+The same page can load a file the showcase exported — see
+[Load a config without a bundler](#load-a-config-without-a-bundler).
 
 Or import the ESM build from a CDN:
 
@@ -244,6 +250,9 @@ true) eases the framing so the plane cannot leave the viewport.
 | `setColors(colors)`                           | Merges colour overrides and restyles the live scene.                                                                                         |
 | `resetColors()`                               | Drops every colour override (back to the theme).                                                                                             |
 | `setOptions(options)`                         | Merges and applies options live (route style, dashes, angles, cities, plane, camera3d…); remounts only when the world/surface/theme changes. |
+| `replaceOptions(options)`                     | Replaces the option set (omitted keys return to defaults) and remounts, keeping the route.                                                   |
+| `applyConfig(json)`                           | Applies a portable config document. A versioned document replaces; a bare options object merges. Returns warnings.                           |
+| `exportConfig({ name? })`                     | The live scene as a portable config (`toConfigJSON()` is the same document, pretty-printed).                                                 |
 | `setWorld('auto' \| 'globe' \| 'flat')`       | Switches renderer, keeping the route.                                                                                                        |
 | `setTheme('light' \| 'dark')`                 | Switches theme at runtime (re-renders the current route).                                                                                    |
 | `getOptions()`                                | Deep copy of the merged options in use.                                                                                                      |
@@ -273,6 +282,11 @@ Subscribe with `rd.on(event, handler)` (returns an unsubscribe fn);
 
 - `RouteDots.CITIES: readonly City[]` — the default city dataset (31 cities).
 - `RouteDots.VERSION: string`
+- `RouteDots.fromConfig(container, config, overrides?)` — mount from a
+  portable config document (see below).
+- `parseRouteDotsConfig` / `stringifyRouteDotsConfig` /
+  `createRouteDotsConfig` / `sanitizeRouteDotsOptions` — the pure config
+  helpers. `ROUTEDOTS_CONFIG_VERSION` is `1`.
 - Palette: `PALETTES.light` / `PALETTES.dark` (`RouteDotsPalette`) and
   `resolvePalette(theme, colors)`.
 - Theme tables: `GLOBE_THEMES`, `ROUTE_THEMES`, `FLAT_THEMES` — all derived
@@ -282,6 +296,211 @@ Subscribe with `rd.on(event, handler)` (returns an unsubscribe fn);
 - Style helpers: `resolveRouteStyle`, `resolveCityMarkers`, `arcPoint`,
   `normalizeArcAngleDeg`, `MAX_ARC_ANGLE_DEG`, `dashUniforms`, `dashArrayPx`,
   `flatArcGeometry`, `resolveFlatCamera3D`, `flatCamera3DTransforms`.
+
+## Portable config
+
+Use the showcase as the editor, then load the file it writes. The JSON _is_
+the library config: `RouteDots.fromConfig` mounts a scene from it, and
+`rd.applyConfig` applies it to a globe that is already on the page.
+
+### 1. Design it in the showcase
+
+```bash
+npm run dev
+# http://localhost:5173
+```
+
+The page is [`examples/showcase/index.html`](../examples/showcase/index.html).
+Once the library is built, any static server can host that file too.
+
+1. Open the customization studio with **🎛**, or jump there with **Export
+   config** in the studio header.
+2. Pick the flight in the search panel (from, to, one-way / round trip). That
+   choice is stored on the config as `route`, separate from arc styling.
+3. Tune the knobs. Each one calls the public API (`setColors`, `setOptions`,
+   `setWorld`), and the JSON box at the bottom updates to match:
+
+| Studio section | What it writes                                                                 |
+| -------------- | ------------------------------------------------------------------------------ |
+| World          | `world`, and the flat map's `camera3d` (perspective, tilt, yaw, depth, orbit)  |
+| Scene          | `surface`, `autoRotate`, `interactive`, `frameRoute`, `view`                   |
+| Colours        | `colors` (outbound, return, plane, cities, markers, borders, countries, ocean) |
+| Plane icon     | `plane.icon`, `plane.size`, `plane.enabled`, `plane.flightMs`, `plane.pauseMs` |
+| City ripple    | `cities` (on/off, period, dot, ripple)                                         |
+| City labels    | `labels` (size, weight, spacing, badge, font family)                           |
+| Airports       | `airports` (dot size, source / destination colour, pulse ring)                 |
+| Route dashes   | `route.outbound.dash` / `route.return.dash`                                    |
+| Curve angle    | `route.outbound` / `route.return` `angle` and `lift`                           |
+
+4. Anything without a knob still belongs in the same JSON: `borders`,
+   `texture`, `fallback`, label `color` / `halo`, route `drawDurationMs` /
+   `staggerMs` / `pulse`, dash colour, airport `ringColor`, `camera3d.follow`,
+   and the rest of the constructor options. Edit the box, then **Apply JSON**
+   so the globe shows it. **Revert** discards edits you have not applied.
+   **Reset to defaults** clears an imported config and puts the knobs back;
+   the current flight stays.
+
+### 2. Take the file with you
+
+**Download** saves `routedots.config.json`. **Copy** puts the same text on the
+clipboard. Both use the text in the box, including edits you have not applied
+yet — apply first if the preview should match the file. **Import**, or drop a
+`.json` file onto the box, loads a config back into the studio so you can keep
+editing.
+
+Put the file in the project that depends on `routedots`. Two places work:
+
+- next to the component, and `import` it (bundlers, and TypeScript with
+  `"resolveJsonModule": true`);
+- in `public/` (or the site root), and `fetch` it.
+
+Do not leave it only inside the RouteDots repo. The host app is what loads it.
+
+### 3. Use it as the library config
+
+```ts
+import config from './routedots.config.json';
+import { RouteDots } from 'routedots';
+
+// Applies `options` and draws `route` from the file.
+const rd = RouteDots.fromConfig(document.getElementById('hero')!, config);
+
+// The file styled the scene. Change the flight whenever the form changes:
+rd.setRoute('LHR', 'SIN', { roundTrip: false });
+```
+
+`fromConfig(el, config, overrides)` merges `overrides` on top, so the studio's
+look can stay and the page can still pin a container-specific `view` or force
+`world: 'globe'`.
+
+Already mounted? Replace the live scene (options and, when the file includes
+one, the route):
+
+```ts
+const parsed = rd.applyConfig(config);
+if (parsed.warnings.length) console.warn(parsed.warnings);
+```
+
+A versioned document **replaces** the option set: keys the file omits fall
+back to library defaults, so a new export does not keep leftover colours from
+the previous one. Read the file back out with `rd.exportConfig()` or
+`rd.toConfigJSON({ name: 'production' })` — same shape the showcase downloads.
+
+To see dropped keys without mounting:
+
+```ts
+import { parseRouteDotsConfig } from 'routedots';
+
+const parsed = parseRouteDotsConfig(config);
+parsed.warnings; // unknown keys, non-portable icons, a bad route, …
+```
+
+Pass the **file** (or its JSON text) to `fromConfig` / `applyConfig`, not the
+object `parseRouteDotsConfig` returns.
+
+### Load a config without a bundler
+
+Serve `routedots.config.json` next to the page and use the IIFE build
+(`RouteDots` is the global, `RouteDots.RouteDots` is the class):
+
+```html
+<script src="routedots.browser.global.js"></script>
+<script>
+  fetch('./routedots.config.json')
+    .then((res) => res.json())
+    .then((config) => {
+      const rd = RouteDots.RouteDots.fromConfig(document.getElementById('hero'), config);
+    });
+</script>
+```
+
+### What the file contains
+
+Version 1:
+
+```json
+{
+  "version": 1,
+  "name": "RouteDots showcase",
+  "route": { "from": "LHR", "to": "DXB", "roundTrip": true },
+  "options": {
+    "theme": "light",
+    "world": "auto",
+    "surface": "countries",
+    "colors": { "outbound": "#0ea5e9", "plane": "#0ea5e9" },
+    "view": { "lat": 40, "lng": 25, "altitude": 1.9 },
+    "autoRotate": { "enabled": true, "speed": 0.4 },
+    "interactive": false,
+    "frameRoute": true,
+    "borders": { "enabled": true, "opacity": 1, "width": 1 },
+    "route": {
+      "outbound": { "angle": 30, "lift": 0.1, "dash": { "length": 0.04, "gap": 0.02 } },
+      "return": { "angle": -30, "lift": 0.2 }
+    },
+    "plane": { "icon": "jet", "size": 0.03, "flightMs": 4800, "enabled": true },
+    "cities": { "periodMs": 1200, "ripple": { "grow": 4 } },
+    "labels": { "fontSize": 14, "letterSpacing": "0.08em" },
+    "airports": { "source": { "color": "#22c55e" }, "destination": { "color": "#f97316" } },
+    "camera3d": { "enabled": true, "tilt": 40, "yaw": -12, "depth": 90 }
+  }
+}
+```
+
+- `version` must be `1`. Any other value throws `RouteDotsConfigError`. A
+  missing version is assumed to be 1 and listed in `warnings`.
+- `name` is a label for you. The renderer ignores it.
+- Top-level `route` is the flight: an IATA code, or `{ lat, lng, code?, name?, country? }`
+  when the city is not in `RouteDots.CITIES`. `roundTrip` defaults to `false`.
+  This is **not** the arc style — that is `options.route`.
+- `options` accepts the same keys as the constructor: `theme`, `world`,
+  `surface`, `colors`, `view`, `autoRotate`, `interactive`, `texture`,
+  `borders`, `route`, `plane`, `cities`, `labels`, `airports`, `camera3d`,
+  `frameRoute`, `fallback`, `flat`. A downloaded file only includes keys the
+  studio actually set; omitted keys use library defaults.
+- `"route": null` clears the flight. If `applyConfig` is given a document with
+  no `route` key, the flight already on screen stays.
+- A hand-written shortcut works too:
+  `{ "theme": "dark", "route": { "from": "LHR", "to": "DXB" } }`.
+- A bare options object (no `version`, and no `route.from` / `route.to`) is
+  merged like `setOptions` instead of replacing the scene. Use that for a
+  small patch; use a versioned document when the file should be the whole
+  config.
+- Unknown keys are dropped and listed on `warnings`, so a newer file still
+  opens. Invalid JSON throws `RouteDotsConfigError`.
+
+Not portable, and omitted on export with a warning: a custom plane `draw`
+function, an image bitmap, and a replacement `land` mask. An SVG
+`plane.icon` (`{ "path": "M0,-40 L18,26 Z", "viewBox": 100 }`) and the preset
+names `airliner`, `jet`, `arrow`, `dot` do round-trip.
+
+`plane.size` is globe radii in the 3D world (the studio's 30px slider is about
+`0.024`) and pixels on the flat map. The exported number matches the world the
+studio was showing. Switch world later and set `size` again.
+
+### In a React component
+
+```tsx
+import { useEffect, useRef } from 'react';
+import { RouteDots } from 'routedots';
+import config from './routedots.config.json';
+
+export function HeroGlobe() {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const rd = RouteDots.fromConfig(el, config);
+    return () => rd.dispose();
+  }, []);
+
+  return <div ref={ref} style={{ position: 'absolute', inset: 0 }} />;
+}
+```
+
+Keep the config for the look. Call `setRoute` from a second effect when the
+form's origin, destination, or trip type changes — same as a scene you built
+with `new RouteDots`.
 
 ## React
 
@@ -315,6 +534,10 @@ export function HeroGlobe({
 }
 ```
 
+The same component can take its look from a showcase export instead of an
+inline options object — see [Portable config](#portable-config) (`fromConfig`
+on mount, `setRoute` when the form changes, `dispose` on unmount).
+
 Vue/Svelte/plain JS: same pattern — construct on mount, `setRoute` on form
 changes, `dispose()` on unmount.
 
@@ -346,6 +569,10 @@ changes, `dispose()` on unmount.
   the active theme.
 
 ## Customisation recipes
+
+**A file from the showcase** — colours, dashes, plane, camera, the whole scene
+— is [Portable config](#portable-config). The call is
+`RouteDots.fromConfig(el, config)`.
 
 **Colours:**
 
