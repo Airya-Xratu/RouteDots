@@ -4,14 +4,19 @@ import { DEFAULT_ARC_ANGLE_DEG, MAX_ARC_ANGLE_DEG } from '../arcPath.js';
 import { DEFAULT_ARC_RADIUS, DEFAULT_OUTBOUND_LIFT, DEFAULT_RETURN_LIFT } from '../RouteModel.js';
 import {
   DEFAULT_OUTBOUND_DASH,
+  DEFAULT_OUTBOUND_DASH_WORLD,
   DEFAULT_RETURN_DASH,
+  DEFAULT_RETURN_DASH_WORLD,
   DEFAULT_STROKE_WIDTH,
   GLOBE_RADIUS_PX_AT_DEFAULT_VIEW,
   GLOBE_WIDTH_LEGACY_MAX,
   MAX_LINE_WIDTH_PX,
+  REFERENCE_ARC_LENGTH,
   dashArrayPx,
+  dashFlowPerSecond,
   dashUniforms,
   globeTubeRadius,
+  resolveDashUnits,
   resolveRouteStyle,
 } from '../routeStyle.js';
 
@@ -36,16 +41,38 @@ describe('resolveRouteStyle — defaults keep the historical look', () => {
     expect(style.return.strokeWidth).toBe(DEFAULT_STROKE_WIDTH.return);
   });
 
-  it('reproduces the old dash uniforms (14 / 0.55 / 0.35 and 18 / 0.45 / 0.22)', () => {
-    const out = dashUniforms(style.outbound.dash!);
+  it('measures the built-in dashes in world units', () => {
+    expect(style.outbound.dash?.units).toBe('world');
+    expect(style.return.dash?.units).toBe('world');
+    expect(style.outbound.dash?.length).toBeCloseTo(DEFAULT_OUTBOUND_DASH_WORLD.length, 9);
+    expect(style.return.dash?.gap).toBeCloseTo(DEFAULT_RETURN_DASH_WORLD.gap, 9);
+  });
+
+  it('reproduces the old dash uniforms on a quarter-globe route (14 and 18 dashes)', () => {
+    // A 90° arc is the reference length the world-unit defaults are sized
+    // against, so the classic look survives the switch of units.
+    const out = dashUniforms(style.outbound.dash!, REFERENCE_ARC_LENGTH);
     expect(out.dashCount).toBeCloseTo(14, 6);
     expect(out.dashSolid).toBeCloseTo(0.55, 6);
     expect(out.flow).toBeCloseTo(0.35, 6);
 
-    const back = dashUniforms(style.return.dash!);
+    const back = dashUniforms(style.return.dash!, REFERENCE_ARC_LENGTH);
     expect(back.dashCount).toBeCloseTo(18, 6);
     expect(back.dashSolid).toBeCloseTo(0.45, 6);
     expect(back.flow).toBeCloseTo(0.22, 6);
+  });
+
+  it('keeps one dash length on every route — the gap does not grow with it', () => {
+    const short = dashUniforms(style.outbound.dash!, 0.3);
+    const long = dashUniforms(style.outbound.dash!, 2.4);
+    // Eight times the route, eight times the dashes: the period is fixed.
+    expect(long.dashCount / short.dashCount).toBeCloseTo(8, 6);
+    expect(short.dashSolid).toBeCloseTo(long.dashSolid, 9);
+    // …and the flow is the same number of dashes per second everywhere.
+    expect(dashFlowPerSecond(style.outbound.dash!, 0.3)).toBeCloseTo(
+      dashFlowPerSecond(style.outbound.dash!, 2.4),
+      9,
+    );
   });
 
   it('defaults the dash colour to the path colour', () => {
@@ -103,7 +130,14 @@ describe('resolveRouteStyle — developer customisation', () => {
       dash: { color: '#00ff00', length: 0.02, gap: 0.01, speed: 3, width: 0.003 },
     });
     const dash = style.outbound.dash!;
-    expect(dash).toEqual({ color: '#00ff00', length: 0.02, gap: 0.01, speed: 3 });
+    // Bare length / gap stay route fractions, so older configs look the same.
+    expect(dash).toEqual({
+      color: '#00ff00',
+      length: 0.02,
+      gap: 0.01,
+      speed: 3,
+      units: 'route',
+    });
     // dash.width doubles as the line width in both worlds
     expect(style.outbound.width).toBe(0.003);
     expect(style.return.width).toBe(0.003);
@@ -158,16 +192,56 @@ describe('resolveRouteStyle — developer customisation', () => {
   });
 });
 
+describe('resolveDashUnits', () => {
+  it('defaults to world units — the same dashes on every route', () => {
+    expect(resolveDashUnits(undefined)).toBe('world');
+    expect(resolveDashUnits({})).toBe('world');
+    expect(resolveDashUnits({ color: '#fff' })).toBe('world');
+    expect(resolveDashUnits({ units: 'world' })).toBe('world');
+  });
+
+  it('reads bare numbers as route fractions and honours an explicit unit', () => {
+    expect(resolveDashUnits({ length: 0.02 })).toBe('route');
+    expect(resolveDashUnits({ gap: 0.02 })).toBe('route');
+    expect(resolveDashUnits({ length: 0.02, units: 'world' })).toBe('world');
+    expect(resolveDashUnits({ units: 'route' })).toBe('route');
+  });
+});
+
+describe('route-unit dashes', () => {
+  it('stretch a pattern over the whole route', () => {
+    const style = resolveRouteStyle('light', {
+      dash: { units: 'route', length: 0.05, gap: 0.05, speed: 4 },
+    });
+    const dash = style.outbound.dash!;
+    expect(dashUniforms(dash, 1).dashCount).toBeCloseTo(10, 9);
+    expect(dashUniforms(dash, 2.4).dashCount).toBeCloseTo(10, 9);
+    expect(dashFlowPerSecond(dash, 2.4)).toBeCloseTo(4, 9);
+  });
+});
+
 describe('dashArrayPx', () => {
   it('scales the fractions of the route to px on the real path', () => {
-    const dash = { color: '#000', length: 0.05, gap: 0.03, speed: 0 };
+    const dash = { color: '#000', length: 0.05, gap: 0.03, speed: 0, units: 'route' as const };
     const [length, gap] = dashArrayPx(dash, 1000);
     expect(length).toBeCloseTo(50, 9);
     expect(gap).toBeCloseTo(30, 9);
   });
 
+  it('converts a world-unit pattern with the map scale, not the path length', () => {
+    const dash = { color: '#000', length: 0.05, gap: 0.03, speed: 0, units: 'world' as const };
+    const worldToPx = 1600 / (2 * Math.PI);
+    const [length, gap] = dashArrayPx(dash, 1000, worldToPx);
+    expect(length).toBeCloseTo(0.05 * worldToPx, 9);
+    expect(gap).toBeCloseTo(0.03 * worldToPx, 9);
+    // The same pattern on a path twice as long keeps the same px.
+    const [again] = dashArrayPx(dash, 2000, worldToPx);
+    expect(again).toBeCloseTo(length, 9);
+  });
+
   it('never emits a zero-length dash (SVG would not render it)', () => {
-    const [length, gap] = dashArrayPx({ color: '#000', length: 0.001, gap: 0.001, speed: 0 }, 0);
+    const dash = { color: '#000', length: 0.001, gap: 0.001, speed: 0, units: 'route' as const };
+    const [length, gap] = dashArrayPx(dash, 0);
     expect(length).toBeGreaterThanOrEqual(1);
     expect(gap).toBeGreaterThanOrEqual(1);
   });

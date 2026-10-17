@@ -455,6 +455,24 @@
         color: #8b9099;
         line-height: 1.5;
       }
+      .studio .subsection {
+        margin: 4px 0 14px;
+        padding: 10px 10px 2px;
+        border: 1px solid #2b2c32;
+        border-radius: 10px;
+        background: #16171b;
+      }
+      .studio .subsection h5 {
+        margin: 0 0 9px;
+        font-size: 10.5px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #8b9099;
+      }
+      .studio .subsection input:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
       .studio-code {
         margin: 16px 0 0;
         padding: 14px 14px;
@@ -866,6 +884,8 @@ rd.applyConfig(nextConfig);</pre>
           view: { lat: 40, lng: 25, altitude: 1.9 },
           autoRotate: { enabled: true, speed: 0.4 },
           plane: { flightMs: 4800, pauseMs: 800 },
+          // The studio's defaults, so the scene starts as the panel reads.
+          hexTiles: { enabled: true, spacingDeg: 2.5, sizeDeg: 1.23, opacity: 0.35 },
         });
         const modeText = (m) => (m === 'webgl' ? '3D globe (WebGL)' : 'flat map (no WebGL)');
         modeEl.textContent = modeText(rd.mode);
@@ -955,6 +975,18 @@ rd.applyConfig(nextConfig);</pre>
         const codeEl = document.getElementById('studio-code');
 
         // The library defaults, so "Reset" can put every knob back.
+        // Dash length / gap are world units (globe radii) by default, so a
+        // short hop and a long haul carry the same dashes. 0.062 ≈ 390 km.
+        const DASH_WORLD = {
+          outbound: { length: 0.062, gap: 0.05, speed: 0.039 },
+          return: { length: 0.039, gap: 0.048, speed: 0.019 },
+        };
+        // The same look in route units (a fraction of the arc), for the
+        // "stretched along the route" mode.
+        const DASH_ROUTE = {
+          outbound: { length: 0.039, gap: 0.032, speed: 4.9 },
+          return: { length: 0.025, gap: 0.031, speed: 3.96 },
+        };
         const STUDIO_DEFAULTS = {
           scene: {
             surface: 'countries',
@@ -963,17 +995,37 @@ rd.applyConfig(nextConfig);</pre>
             interactive: false,
             frameRoute: true,
             view: { lat: 40, lng: 25, altitude: 1.9 },
+            hexTiles: {
+              enabled: true,
+              spacingDeg: 2.5,
+              sizeDeg: 1.23,
+              insetDeg: 0.15,
+              color: '',
+              opacity: 0.35,
+            },
           },
           route: {
             outbound: {
               angle: 0,
               lift: 0.1,
-              dash: { length: 0.039, gap: 0.032, speed: 4.9, width: 1.8 },
+              dash: {
+                units: 'world',
+                length: DASH_WORLD.outbound.length,
+                gap: DASH_WORLD.outbound.gap,
+                speed: DASH_WORLD.outbound.speed,
+                width: 1.8,
+              },
             },
             return: {
               angle: 0,
               lift: 0.2,
-              dash: { length: 0.025, gap: 0.031, speed: 3.96, width: 1.4 },
+              dash: {
+                units: 'world',
+                length: DASH_WORLD.return.length,
+                gap: DASH_WORLD.return.gap,
+                speed: DASH_WORLD.return.speed,
+                width: 1.4,
+              },
             },
           },
           cities: {
@@ -1041,7 +1093,13 @@ rd.applyConfig(nextConfig);</pre>
             num.textContent = spec.format(Number(input.value));
             spec.onInput(Number(input.value));
           });
-          return { input, paint };
+          // Lets a control whose bounds depend on another slider follow it.
+          const range = (min, max, step = spec.step) => {
+            input.min = String(min);
+            input.max = String(max);
+            input.step = String(step);
+          };
+          return { input, paint, range };
         };
         const selection = (host, spec) => {
           const wrap = document.createElement('label');
@@ -1182,6 +1240,19 @@ rd.applyConfig(nextConfig);</pre>
             ? round(studio.airports.size / AIRPORT_PX_PER_UNIT, 5)
             : studio.airports.size;
         const airportColor = (value) => (value.trim() ? value.trim() : undefined);
+        // Hex tiles: colour and size are optional; an empty colour follows the
+        // theme's border colour, like the renderer does.
+        const hexTilesSnippet = () => ({
+          enabled: studio.scene.hexTiles.enabled,
+          spacingDeg: round(studio.scene.hexTiles.spacingDeg, 2),
+          sizeDeg: round(
+            Math.min(studio.scene.hexTiles.sizeDeg, studio.scene.hexTiles.spacingDeg / SQRT3),
+            3,
+          ),
+          insetDeg: round(studio.scene.hexTiles.insetDeg, 2),
+          ...(studio.scene.hexTiles.color ? { color: studio.scene.hexTiles.color } : {}),
+          opacity: round(studio.scene.hexTiles.opacity, 2),
+        });
         const airportsSnippet = () => ({
           size: airportSizeForWorld(),
           ring: studio.airports.ring,
@@ -1323,10 +1394,103 @@ rd.applyConfig(nextConfig);</pre>
           value: 'countries',
           onChange: (value) => {
             studio.scene.surface = value;
+            setHexSurface();
             rd.setOptions({ surface: value });
             showSnippet();
           },
         });
+        // ── Hexagon tiles (country interiors) ────────────────────────────────
+        const hexBox = document.createElement('div');
+        hexBox.className = 'subsection';
+        const hexHeading = document.createElement('h5');
+        hexHeading.textContent = 'Hexagon tiles';
+        hexBox.appendChild(hexHeading);
+        sceneBox.appendChild(hexBox);
+        const SQRT3 = Math.sqrt(3);
+        const hexEnabled = checkbox(hexBox, {
+          id: 'hex-enabled',
+          label: 'Hexagon tiles inside countries',
+          checked: STUDIO_DEFAULTS.scene.hexTiles.enabled,
+          onChange: (on) => {
+            studio.scene.hexTiles.enabled = on;
+            schedule(applyHexTiles);
+          },
+        });
+        const hexSpacing = slider(hexBox, {
+          id: 'hex-spacing',
+          label: 'Tile spacing',
+          min: 0.5,
+          max: 8,
+          step: 0.1,
+          value: STUDIO_DEFAULTS.scene.hexTiles.spacingDeg,
+          format: (v) => `${v.toFixed(1)}°`,
+          onInput: (v) => {
+            studio.scene.hexTiles.spacingDeg = v;
+            // A tile can never be bigger than the pitch it sits on.
+            hexSize.range(0.1, v / SQRT3, 0.01);
+            studio.scene.hexTiles.sizeDeg = Math.min(studio.scene.hexTiles.sizeDeg, v / SQRT3);
+            hexSize.paint(studio.scene.hexTiles.sizeDeg);
+            schedule(applyHexTiles);
+          },
+        });
+        const hexSize = slider(hexBox, {
+          id: 'hex-size',
+          label: 'Tile size',
+          min: 0.1,
+          max: 2.5 / SQRT3,
+          step: 0.01,
+          value: STUDIO_DEFAULTS.scene.hexTiles.sizeDeg,
+          format: (v) => {
+            const gap = Math.max(0, studio.scene.hexTiles.spacingDeg - v * SQRT3);
+            return `${v.toFixed(2)}° · ${gap.toFixed(2)}° gap`;
+          },
+          onInput: (v) => {
+            studio.scene.hexTiles.sizeDeg = v;
+            schedule(applyHexTiles);
+          },
+        });
+        const hexInset = slider(hexBox, {
+          id: 'hex-inset',
+          label: 'Gap from borders',
+          min: 0,
+          max: 1.5,
+          step: 0.05,
+          value: STUDIO_DEFAULTS.scene.hexTiles.insetDeg,
+          format: (v) => `${v.toFixed(2)}°`,
+          onInput: (v) => {
+            studio.scene.hexTiles.insetDeg = v;
+            schedule(applyHexTiles);
+          },
+        });
+        const hexOpacity = slider(hexBox, {
+          id: 'hex-opacity',
+          label: 'Tile opacity',
+          min: 0,
+          max: 1,
+          step: 0.05,
+          value: STUDIO_DEFAULTS.scene.hexTiles.opacity,
+          format: (v) => v.toFixed(2),
+          onInput: (v) => {
+            studio.scene.hexTiles.opacity = v;
+            schedule(applyHexTiles);
+          },
+        });
+        const hexColor = colorRow(hexBox, 'hex-color', 'Tile colour');
+        hexColor.input.addEventListener('input', () => {
+          studio.scene.hexTiles.color = hexColor.input.value;
+          schedule(applyHexTiles);
+        });
+        note(
+          hexBox,
+          'Tiles are dropped unless the whole hexagon fits inside one country and clears every ' +
+            'border line, so nothing ever paints over a border. Countries only.',
+        );
+        const setHexSurface = () => {
+          const on = studio.scene.surface === 'countries';
+          for (const input of hexBox.querySelectorAll('input')) input.disabled = !on;
+        };
+        const applyHexTiles = () => rd.setOptions({ hexTiles: hexTilesSnippet() });
+
         const autoRotateToggle = checkbox(sceneBox, {
           id: 'auto-rotate',
           label: 'Idle rotation',
@@ -1458,6 +1622,10 @@ rd.applyConfig(nextConfig);</pre>
           const active = rd.activePalette;
           for (const [key] of COLOR_KEYS) {
             if (!(key in paletteOverrides) && active[key]) colorInputs[key].value = active[key];
+          }
+          // Hex tiles default to the theme's border colour until one is picked.
+          if (!studio.scene.hexTiles.color && active.borders) {
+            hexColor.input.value = active.borders;
           }
         };
         syncColors();
@@ -1781,6 +1949,38 @@ rd.applyConfig(nextConfig);</pre>
           for (const leg of dashTargets()) studio.route[leg].dash[key] = value;
           schedule(applyRoute);
         };
+        // 1 globe radius, for the km read-out on the world-unit sliders.
+        const EARTH_RADIUS_KM = 6371;
+        // World units read as km on the ground; route units as a percentage of
+        // the arc.
+        const dashFormat = (value) => {
+          const dash = studio.route[dashLeg === 'both' ? 'outbound' : dashLeg].dash;
+          return dash.units === 'world'
+            ? `${Math.round(value * EARTH_RADIUS_KM)} km`
+            : `${(value * 100).toFixed(1)}%`;
+        };
+        const dashUnitsSelect = selection(dashBox, {
+          id: 'dash-units',
+          label: 'Spacing',
+          options: [
+            ['world', 'Same on every route'],
+            ['route', 'Stretched along the route'],
+          ],
+          value: STUDIO_DEFAULTS.route.outbound.dash.units,
+          onChange: (value) => {
+            const presets = value === 'world' ? DASH_WORLD : DASH_ROUTE;
+            for (const leg of dashTargets()) {
+              const dash = studio.route[leg].dash;
+              const preset = presets[leg];
+              dash.units = value;
+              dash.length = preset.length;
+              dash.gap = preset.gap;
+              dash.speed = preset.speed;
+            }
+            loadDash();
+            schedule(applyRoute);
+          },
+        });
         const dashLength = slider(dashBox, {
           id: 'dash-length',
           label: 'Dash length',
@@ -1788,7 +1988,7 @@ rd.applyConfig(nextConfig);</pre>
           max: 0.2,
           step: 0.001,
           value: STUDIO_DEFAULTS.route.outbound.dash.length,
-          format: (v) => `${(v * 100).toFixed(1)}%`,
+          format: (v) => dashFormat(v),
           onInput: (v) => writeDash('length', v),
         });
         const dashGap = slider(dashBox, {
@@ -1798,17 +1998,17 @@ rd.applyConfig(nextConfig);</pre>
           max: 0.2,
           step: 0.001,
           value: STUDIO_DEFAULTS.route.outbound.dash.gap,
-          format: (v) => `${(v * 100).toFixed(1)}%`,
+          format: (v) => dashFormat(v),
           onInput: (v) => writeDash('gap', v),
         });
         const dashSpeed = slider(dashBox, {
           id: 'dash-speed',
           label: 'Flow speed',
           min: 0,
-          max: 15,
-          step: 0.2,
+          max: 0.2,
+          step: 0.001,
           value: STUDIO_DEFAULTS.route.outbound.dash.speed,
-          format: (v) => `${v.toFixed(1)}/s`,
+          format: (v) => `${v.toFixed(3)}/s`,
           onInput: (v) => writeDash('speed', v),
         });
         const dashWidth = slider(dashBox, {
@@ -1824,6 +2024,14 @@ rd.applyConfig(nextConfig);</pre>
         const loadDash = () => {
           const leg = dashLeg === 'both' ? 'outbound' : dashLeg;
           const dash = studio.route[leg].dash;
+          const world = (dash.units ?? 'world') === 'world';
+          dashUnitsSelect.value = dash.units ?? 'world';
+          // World lengths are globe radii (a dash is a few hundred km); route
+          // fractions are percentages of the arc.
+          const bounds = world ? [0.002, 0.4, 0.002] : [0.005, 0.2, 0.001];
+          dashLength.range(bounds[0], bounds[1], bounds[2]);
+          dashGap.range(bounds[0], bounds[1], bounds[2]);
+          dashSpeed.range(0, world ? 0.2 : 15, world ? 0.001 : 0.2);
           dashLength.paint(dash.length);
           dashGap.paint(dash.gap);
           dashSpeed.paint(dash.speed);
@@ -1831,8 +2039,9 @@ rd.applyConfig(nextConfig);</pre>
         };
         note(
           dashBox,
-          'Length and gap are fractions of the whole route, and the colour follows the route ' +
-            'colour — so a dash defined once looks the same in both worlds.',
+          '“Same on every route” fixes the dash length on the ground, so a long haul simply ' +
+            'carries more dashes than a hop. “Stretched” spreads one pattern over the whole ' +
+            'arc. The colour follows the route colour either way.',
         );
 
         // ── Curve angle ─────────────────────────────────────────────────────
@@ -1904,9 +2113,10 @@ rd.applyConfig(nextConfig);</pre>
                 angle: studio.route.outbound.angle,
                 lift: round(studio.route.outbound.lift, 2),
                 dash: {
+                  units: studio.route.outbound.dash.units,
                   length: round(studio.route.outbound.dash.length, 3),
                   gap: round(studio.route.outbound.dash.gap, 3),
-                  speed: round(studio.route.outbound.dash.speed, 2),
+                  speed: round(studio.route.outbound.dash.speed, 3),
                   width: round(studio.route.outbound.dash.width, 2),
                 },
               },
@@ -1914,9 +2124,10 @@ rd.applyConfig(nextConfig);</pre>
                 angle: studio.route.return.angle,
                 lift: round(studio.route.return.lift, 2),
                 dash: {
+                  units: studio.route.return.dash.units,
                   length: round(studio.route.return.dash.length, 3),
                   gap: round(studio.route.return.dash.gap, 3),
-                  speed: round(studio.route.return.dash.speed, 2),
+                  speed: round(studio.route.return.dash.speed, 3),
                   width: round(studio.route.return.dash.width, 2),
                 },
               },
@@ -1936,6 +2147,7 @@ rd.applyConfig(nextConfig);</pre>
             },
             labels: labelsSnippet(),
             airports: airportsSnippet(),
+            ...(studio.scene.surface === 'countries' ? { hexTiles: hexTilesSnippet() } : {}),
             plane: { icon: planeIcon(), size: planeSizeForWorld() },
             camera3d: {
               enabled: studio.camera3d.enabled,
@@ -2000,6 +2212,14 @@ rd.applyConfig(nextConfig);</pre>
           angleBack.paint(studio.route.return.angle);
           liftOut.paint(studio.route.outbound.lift);
           liftBack.paint(studio.route.return.lift);
+          hexEnabled.paint(studio.scene.hexTiles.enabled);
+          hexSpacing.paint(studio.scene.hexTiles.spacingDeg);
+          hexSize.range(0.1, studio.scene.hexTiles.spacingDeg / SQRT3, 0.01);
+          hexSize.paint(studio.scene.hexTiles.sizeDeg);
+          hexInset.paint(studio.scene.hexTiles.insetDeg);
+          hexOpacity.paint(studio.scene.hexTiles.opacity);
+          hexColor.input.value = studio.scene.hexTiles.color || '#ffffff';
+          setHexSurface();
           loadDash();
         };
         // ── portable config: the JSON the host project imports ──────────────
@@ -2073,6 +2293,14 @@ rd.applyConfig(nextConfig);</pre>
               studio.scene.view.altitude = options.view.altitude;
             }
           }
+          if (options.hexTiles) {
+            const hex = options.hexTiles;
+            if (typeof hex.enabled === 'boolean') studio.scene.hexTiles.enabled = hex.enabled;
+            for (const key of ['spacingDeg', 'sizeDeg', 'insetDeg', 'opacity']) {
+              if (typeof hex[key] === 'number') studio.scene.hexTiles[key] = hex[key];
+            }
+            if (typeof hex.color === 'string') studio.scene.hexTiles.color = hex.color;
+          }
           if (options.colors) {
             for (const [key, value] of Object.entries(options.colors)) {
               if (typeof value !== 'string' || !colorInputs[key]) continue;
@@ -2086,6 +2314,15 @@ rd.applyConfig(nextConfig);</pre>
             if (typeof style.angle === 'number') studio.route[leg].angle = style.angle;
             if (typeof style.lift === 'number') studio.route[leg].lift = style.lift;
             if (style.dash && typeof style.dash === 'object') {
+              if (style.dash.units === 'world' || style.dash.units === 'route') {
+                studio.route[leg].dash.units = style.dash.units;
+              } else if (
+                typeof style.dash.length === 'number' ||
+                typeof style.dash.gap === 'number'
+              ) {
+                // Bare numbers are route fractions, as the library reads them.
+                studio.route[leg].dash.units = 'route';
+              }
               for (const key of ['length', 'gap', 'speed', 'width']) {
                 if (typeof style.dash[key] === 'number')
                   studio.route[leg].dash[key] = style.dash[key];
@@ -2228,6 +2465,9 @@ rd.applyConfig(nextConfig);</pre>
             const parsed = rd.applyConfig(text);
             configDirty = false;
             hydrateFromConfig(parsed);
+            // A config that carries no hexTiles leaves the panel's defaults in
+            // place — push them, so panel and scene agree.
+            schedule(applyHexTiles);
             refreshConfigPreview(true);
             const notes = parsed.warnings.filter(Boolean).slice(0, 2).join(' ');
             setStatus(notes ? `Applied config. ${notes}` : 'Applied config', 'ok');
@@ -2333,6 +2573,7 @@ rd.applyConfig(nextConfig);</pre>
             view: { lat: 40, lng: 25, altitude: 1.9 },
             autoRotate: { enabled: true, speed: 0.4 },
             plane: { flightMs: 4800, pauseMs: 800 },
+            hexTiles: hexTilesSnippet(),
           });
           showSnippet();
           setStatus('Reset to defaults', 'ok');

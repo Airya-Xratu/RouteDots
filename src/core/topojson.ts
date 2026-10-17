@@ -158,6 +158,23 @@ export function decodeCountryPolygons(topo: TopoCountries): PolygonRings[] {
   return polygons.flatMap((polygon) => splitPolygonAtAntimeridian(polygon));
 }
 
+const countryPolygonCache = new WeakMap<TopoCountries, PolygonRings[]>();
+
+/**
+ * Same as {@link decodeCountryPolygons}, memoized per topology.
+ *
+ * Decoding is deterministic and a bundled topology never changes at runtime,
+ * so layers that re-decode on every restyle (the hex-tile overlay) can share
+ * one array instead of paying for the walk each time.
+ */
+export function decodeCountryPolygonsCached(topo: TopoCountries): PolygonRings[] {
+  const cached = countryPolygonCache.get(topo);
+  if (cached) return cached;
+  const decoded = decodeCountryPolygons(topo);
+  countryPolygonCache.set(topo, decoded);
+  return decoded;
+}
+
 /** Total number of vertices across all rings (handy for profiling/tests). */
 export function countRingVertices(polygons: PolygonRings[]): number {
   let count = 0;

@@ -70,6 +70,7 @@ Or import the ESM build from a CDN:
 | `interactive` | `boolean`                                    | `false`                | Allow pointer drag + wheel zoom (globe).                                              |
 | `texture`     | `{ stepDeg?, resDeg?, dotSizeDeg?, width? }` | 2 / auto / 0.62 / 2048 | Dot lattice & texture options.                                                        |
 | `borders`     | `{ enabled?, color?, opacity?, width? }`     | on, white, 1 / 1 px    | Country border lines. `opacity` = globe, `width` = flat-map stroke (px).              |
+| `hexTiles`    | `HexTilesOptions`                            | off — see below        | **Hexagon tiles** filling the country interiors (the `dots` surface's hex twin).      |
 | `route`       | `RouteStyleOptions`                          | see below              | Per-leg colour, opacity, lift, **curve angle**, width and **dash pattern**.           |
 | `cities`      | `CityMarkersOptions`                         | see below              | City markers: colour, period, dot size/dim, **ripple** size/thickness/growth/opacity. |
 | `labels`      | `CityLabelTextStyle`                         | see below              | City-name **text style** — font, size, weight, spacing, colours, halo.                |
@@ -116,18 +117,70 @@ new RouteDots(el, {
 | `outbound`, `return`                   | —                                       | Per-path overrides of any key above (plus their own `dash`).                                                                                                                                               |
 | `drawDurationMs`, `staggerMs`, `pulse` | 1100 / 350 / true                       | Draw-on timing and endpoint pulses.                                                                                                                                                                        |
 
-`dash.length` and `dash.gap` are **fractions of the whole route** (outbound
-defaults: `1/14 · 0.55` and `1/14 · 0.45`; return: `1/18 · 0.45` and
-`1/18 · 0.55`), so a pattern looks the same on the globe and on the flat map;
-`speed` is dashes per second (`0` freezes them) and `dash: false` (or
-`enabled: false`) draws a solid line. Legacy top-level `outboundLift`,
-`returnLift` and `arcRadius` keys still work.
+#### Dash units
+
+`dash.units` decides what `length` and `gap` measure:
+
+| `units`   | Meaning                                                                                        | Default pattern                                  |
+| --------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `'world'` | **A fixed length on the ground** — globe radii on the globe, degrees on the flat map (default) | `length 0.062` / `gap 0.050` (≈ 390 km / 320 km) |
+| `'route'` | A fraction of the whole route — the pattern stretches to fit, so gaps grow with the route      | `1/14 · 0.55` / `1/14 · 0.45`                    |
+
+With `'world'` a short hop and a long haul carry the **same** dashes and the
+same gaps — a longer route simply fits more of them, and the flow speed is a
+constant travel speed (globe radii per second). The defaults are sized so a
+90° route looks exactly like the old fraction-based one.
+
+Supplying `length` / `gap` **without** naming `units` keeps the historical
+reading (route fractions), so configs written for older versions look the
+same; add `units: 'world'` to opt into fixed-length dashes.
+
+`speed` is the flow rate (`0` freezes the dashes). In `'world'` units it is
+the travel speed in globe radii per second (default `0.039` outbound, `0.019`
+return). `dash: false` (or `enabled: false`) draws a solid line. Legacy
+top-level `outboundLift`, `returnLift` and `arcRadius` keys still work.
 
 ```ts
 new RouteDots(el, {
   route: {
-    outbound: { angle: 32, dash: { length: 0.04, gap: 0.02, speed: 2, width: 2.4 } },
-    return: { angle: -32, lift: 0.28, dash: { length: 0.02, gap: 0.01, speed: 1 } },
+    // Same dashes on every route:
+    outbound: { angle: 32, dash: { units: 'world', length: 0.05, gap: 0.04, speed: 0.04 } },
+    // …or the stretch-to-fit pattern:
+    return: { angle: -32, lift: 0.28, dash: { units: 'route', length: 0.02, gap: 0.01, speed: 1 } },
+  },
+});
+```
+
+#### Hexagon tiles (`hexTiles`)
+
+On the `countries` surface you can fill the country interiors with hexagon
+tiles — the hex twin of the `dots` surface's dot lattice.
+
+| Key          | Default               | Description                                                                                      |
+| ------------ | --------------------- | ------------------------------------------------------------------------------------------------ |
+| `enabled`    | `false`               | Turn the overlay on. It only exists on the `countries` surface.                                  |
+| `spacingDeg` | `2.5`                 | Centre-to-centre tile spacing (grid pitch), in degrees.                                          |
+| `sizeDeg`    | `0.85 · spacing / √3` | Tile circum-radius in degrees. `spacing / √3` makes neighbours touch; larger values are clamped. |
+| `insetDeg`   | `0.06 · spacing`      | Minimum clear distance between a tile and any country border line, in degrees.                   |
+| `color`      | theme border colour   | Tile fill colour.                                                                                |
+| `opacity`    | `0.35`                | Tile fill opacity, 0..1.                                                                         |
+
+A tile is only drawn when the **whole hexagon** sits inside one country and
+keeps `insetDeg` clear of every country border line, so a tile never paints
+over a border or bleeds into a neighbour — narrow countries simply get fewer
+(or no) tiles until you lower `spacingDeg`. Everything applies live through
+`rd.setOptions({ hexTiles })`.
+
+```ts
+new RouteDots(el, {
+  surface: 'countries',
+  hexTiles: {
+    enabled: true,
+    spacingDeg: 1.6, // finer lattice
+    sizeDeg: 0.8, // smaller tiles → visible gaps (spacing / √3 ≈ 0.92 would touch)
+    insetDeg: 0.1, // keep 0.1° of clear space around every border (default 0.06 · spacing)
+    color: '#ffffff',
+    opacity: 0.35,
   },
 });
 ```
@@ -295,6 +348,7 @@ Subscribe with `rd.on(event, handler)` (returns an unsubscribe fn);
   component.
 - Style helpers: `resolveRouteStyle`, `resolveCityMarkers`, `arcPoint`,
   `normalizeArcAngleDeg`, `MAX_ARC_ANGLE_DEG`, `dashUniforms`, `dashArrayPx`,
+  `dashFlowPerSecond`, `buildHexGrid`,
   `flatArcGeometry`, `resolveFlatCamera3D`, `flatCamera3DTransforms`.
 
 ## Portable config
@@ -323,7 +377,7 @@ Once the library is built, any static server can host that file too.
 | Studio section | What it writes                                                                 |
 | -------------- | ------------------------------------------------------------------------------ |
 | World          | `world`, and the flat map's `camera3d` (perspective, tilt, yaw, depth, orbit)  |
-| Scene          | `surface`, `autoRotate`, `interactive`, `frameRoute`, `view`                   |
+| Scene          | `surface`, `autoRotate`, `interactive`, `frameRoute`, `view`, `hexTiles`       |
 | Colours        | `colors` (outbound, return, plane, cities, markers, borders, countries, ocean) |
 | Plane icon     | `plane.icon`, `plane.size`, `plane.enabled`, `plane.flightMs`, `plane.pauseMs` |
 | City ripple    | `cities` (on/off, period, dot, ripple)                                         |
@@ -454,7 +508,7 @@ Version 1:
   This is **not** the arc style — that is `options.route`.
 - `options` accepts the same keys as the constructor: `theme`, `world`,
   `surface`, `colors`, `view`, `autoRotate`, `interactive`, `texture`,
-  `borders`, `route`, `plane`, `cities`, `labels`, `airports`, `camera3d`,
+  `borders`, `hexTiles`, `route`, `plane`, `cities`, `labels`, `airports`, `camera3d`,
   `frameRoute`, `fallback`, `flat`. A downloaded file only includes keys the
   studio actually set; omitted keys use library defaults.
 - `"route": null` clears the flight. If `applyConfig` is given a document with

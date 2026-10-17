@@ -17,20 +17,53 @@ import { DEFAULT_ARC_RADIUS, DEFAULT_OUTBOUND_LIFT, DEFAULT_RETURN_LIFT } from '
 export type RoutePathId = 'outbound' | 'return';
 
 /**
+ * What {@link DashOptions.length} and {@link DashOptions.gap} measure:
+ *
+ * - `'world'` — a **fixed length on the ground**: globe radii on the sphere,
+ *   degrees (× π/180 per radius) on the flat map. A short hop and a long haul
+ *   then carry the very same dashes and the very same gaps — a long route
+ *   simply fits more of them.
+ * - `'route'` — a fraction of the whole route (the historical meaning), so
+ *   the pattern stretches to fit: 14 dashes stay 14 dashes whether the arc
+ *   crosses a city or an ocean, and the gaps grow with the route.
+ */
+export type DashUnits = 'world' | 'route';
+
+/**
  * Dash pattern of a route path.
  *
- * `length` and `gap` are fractions of the whole route (so "14 dashes with a
- * 0.55 duty cycle" is `length: 0.0393, gap: 0.0321`), which keeps the pattern
- * identical whether the arc is a short hop or a long haul.
+ * The built-in pattern measures in **world units** (`units: 'world'`), so
+ * dashes and gaps are the same physical length on every route. Pass explicit
+ * `length` / `gap` numbers with `units: 'route'` for the older
+ * stretch-to-fit behaviour — or keep `units: 'world'` and tune the fixed
+ * length yourself.
  */
 export interface DashOptions {
   /** Dash colour (defaults to the path colour). */
   color?: string;
-  /** Dash length as a fraction of the route, 0..1. */
+  /**
+   * Dash length, in the unit named by {@link DashOptions.units}.
+   * (Default: 0.062 globe radii ≈ 390 km.)
+   */
   length?: number;
-  /** Gap between dashes as a fraction of the route, 0..1. */
+  /**
+   * Gap between dashes, in the unit named by {@link DashOptions.units}.
+   * (Default: 0.05 globe radii ≈ 320 km.)
+   */
   gap?: number;
-  /** Dash travel in dashes per second (default per path; 0 freezes them). */
+  /**
+   * Unit of `length` / `gap` (default `'world'`).
+   *
+   * When you supply `length` or `gap` *without* naming a unit they are read
+   * as route fractions, so hand-written configs written for older versions
+   * keep their look.
+   */
+  units?: DashUnits;
+  /**
+   * Dash flow (default per path; 0 freezes them). In `'world'` units this is
+   * the travel speed in globe radii per second, so the dashes sweep the
+   * route at the same pace whatever its length.
+   */
   speed?: number;
   /** Dash thickness: tube radius (globe) / stroke width in px (flat). */
   width?: number;
@@ -88,6 +121,8 @@ export interface ResolvedDash {
   length: number;
   gap: number;
   speed: number;
+  /** Unit `length` / `gap` are measured in (see {@link DashOptions.units}). */
+  units: DashUnits;
 }
 
 /** A path style with every value resolved. */
@@ -114,8 +149,18 @@ export interface ResolvedRouteStyle {
 }
 
 /**
- * Outbound dash defaults — the historical look (14 dashes, 55 % duty cycle,
- * flowing at 0.35 route-lengths per second).
+ * Arc length the built-in dash patterns are sized against: a quarter of the
+ * globe (90° of great circle), the length of a typical long haul.
+ *
+ * The world-unit defaults are the old route-fraction defaults times this
+ * length, so a 90° route looks exactly like it always did — while every other
+ * route now gets the same dashes instead of stretched ones.
+ */
+export const REFERENCE_ARC_LENGTH = Math.PI / 2;
+
+/**
+ * Outbound dash defaults in **route fractions** — 14 dashes, 55 % duty
+ * cycle. Used when `units: 'route'` is asked for.
  */
 export const DEFAULT_OUTBOUND_DASH = {
   length: (1 / 14) * 0.55,
@@ -123,14 +168,43 @@ export const DEFAULT_OUTBOUND_DASH = {
   speed: 4.9,
 } as const;
 
+/** Dash period of the outbound route-fraction default (1/14 of the route). */
+const outboundPeriod = DEFAULT_OUTBOUND_DASH.length + DEFAULT_OUTBOUND_DASH.gap;
+
 /**
- * Return dash defaults — finer and slower than the outbound (18 dashes,
- * 45 % duty cycle, 0.22 route-lengths per second).
+ * Return dash defaults in **route fractions** — finer than the outbound
+ * (18 dashes, 45 % duty cycle).
  */
 export const DEFAULT_RETURN_DASH = {
   length: (1 / 18) * 0.45,
   gap: (1 / 18) * 0.55,
   speed: 3.96,
+} as const;
+
+/** Dash period of the return route-fraction default (1/18 of the route). */
+const returnPeriod = DEFAULT_RETURN_DASH.length + DEFAULT_RETURN_DASH.gap;
+
+/**
+ * Outbound dash defaults in **world units** (globe radii) — the same look as
+ * {@link DEFAULT_OUTBOUND_DASH} on a 90° route: a ~390 km dash, a ~320 km
+ * gap, and the same number of dashes on every route.
+ */
+export const DEFAULT_OUTBOUND_DASH_WORLD = {
+  length: DEFAULT_OUTBOUND_DASH.length * REFERENCE_ARC_LENGTH,
+  gap: DEFAULT_OUTBOUND_DASH.gap * REFERENCE_ARC_LENGTH,
+  // Travel speed, in globe radii per second: the one that keeps the pattern
+  // flowing at the same 0.35 dashes/second the fraction default had.
+  speed: DEFAULT_OUTBOUND_DASH.speed * outboundPeriod * (outboundPeriod * REFERENCE_ARC_LENGTH),
+} as const;
+
+/**
+ * Return dash defaults in **world units** (globe radii) — the same look as
+ * {@link DEFAULT_RETURN_DASH} on a 90° route.
+ */
+export const DEFAULT_RETURN_DASH_WORLD = {
+  length: DEFAULT_RETURN_DASH.length * REFERENCE_ARC_LENGTH,
+  gap: DEFAULT_RETURN_DASH.gap * REFERENCE_ARC_LENGTH,
+  speed: DEFAULT_RETURN_DASH.speed * returnPeriod * (returnPeriod * REFERENCE_ARC_LENGTH),
 } as const;
 
 /** Flat-world stroke widths (px) — outbound slightly heavier than the return. */
@@ -176,37 +250,117 @@ export function globeTubeRadius(width: number): number {
 
 /** Smallest dash / gap allowed, as a fraction of the route. */
 const MIN_DASH_PART = 0.0015;
-/** Largest dash / gap allowed. */
+/** Largest dash / gap allowed, as a fraction of the route. */
 const MAX_DASH_PART = 0.5;
+/** Smallest dash / gap allowed in world units (globe radii). */
+const MIN_DASH_WORLD = 0.0005;
+/** Largest dash / gap allowed in world units (globe radii). */
+const MAX_DASH_WORLD = 0.5;
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
 const num = (value: number | undefined, fallback: number): number =>
   Number.isFinite(value) ? (value as number) : fallback;
 
-/** Shader uniforms for a dash pattern (globe). */
-export function dashUniforms(dash: ResolvedDash): {
+/**
+ * The unit a dash pattern is measured in.
+ *
+ * The library default is **world units** — equal dashes on every route. A
+ * hand-written `length` / `gap` without an explicit `units` stays a route
+ * fraction, so older configs keep the look they were authored against.
+ */
+export function resolveDashUnits(dash: DashOptions | undefined): DashUnits {
+  if (dash?.units === 'route' || dash?.units === 'world') return dash.units;
+  if (dash && (dash.length !== undefined || dash.gap !== undefined)) return 'route';
+  return 'world';
+}
+
+/**
+ * Length of one dash + gap period, and the route length it divides, in the
+ * units the shader and the SVG both count in.
+ *
+ * For `'route'` units the route is one unit long by definition, so a pattern
+ * is a pure fraction; for `'world'` units the pattern is a fixed arc length
+ * and the route length decides how many of them fit.
+ */
+function dashPeriod(dash: ResolvedDash, routeLength: number): { period: number; length: number } {
+  if (dash.units === 'world') {
+    const period = Math.max(MIN_DASH_WORLD, dash.length + dash.gap);
+    return { period, length: Math.max(1e-6, routeLength) };
+  }
+  return { period: Math.max(MIN_DASH_PART, dash.length + dash.gap), length: 1 };
+}
+
+/**
+ * Shader uniforms for a dash pattern (globe).
+ *
+ * @param dash resolved pattern
+ * @param routeLength length of the arc in world units (globe radii) — only
+ *   read when the pattern is measured in world units.
+ */
+export function dashUniforms(
+  dash: ResolvedDash,
+  routeLength = 1,
+): {
   dashCount: number;
   dashSolid: number;
   flow: number;
 } {
-  const period = Math.max(MIN_DASH_PART, dash.length + dash.gap);
+  if (dash.units === 'world') {
+    const { period, length } = dashPeriod(dash, routeLength);
+    return {
+      // A fixed-length pattern: the route length only decides *how many*
+      // dashes fit, never how long one is.
+      dashCount: length / period,
+      dashSolid: clamp(dash.length / period, 0.02, 0.98),
+      // Constant ground speed (globe radii per second) → the same number of
+      // dashes flows past any point on any route, every second.
+      flow: dash.speed / period,
+    };
+  }
+  const { period, length } = dashPeriod(dash, routeLength);
   return {
-    dashCount: 1 / period,
+    dashCount: length / period,
     dashSolid: clamp(dash.length / period, 0.02, 0.98),
-    flow: dash.speed * period,
+    flow: (dash.speed * period) / length,
   };
 }
 
-/** `stroke-dasharray` values in px for a flat-world path of `lengthPx`. */
-export function dashArrayPx(dash: ResolvedDash, lengthPx: number): [number, number] {
-  const scale = Math.max(1, lengthPx);
+/**
+ * How many dash periods flow past a point per second — the rate the flat map
+ * (and, via {@link dashUniforms}, the globe) animates at.
+ *
+ * A world-unit pattern flows at a constant rate on every route; a
+ * route-fraction one keeps the flat map's historical reading of `speed`.
+ *
+ * @param dash resolved pattern
+ * @param routeLength length of the arc in world units (globe radii), read
+ *   only for world-unit patterns.
+ */
+export function dashFlowPerSecond(dash: ResolvedDash, routeLength = 1): number {
+  if (dash.units === 'route') return dash.speed;
+  const { period } = dashPeriod(dash, routeLength);
+  return dash.speed / period;
+}
+
+/**
+ * `stroke-dasharray` values in px for a flat-world path.
+ *
+ * @param dash resolved pattern
+ * @param lengthPx length of the path in map px — used as the scale for
+ *   `'route'` patterns.
+ * @param worldToPx map px per world unit (`width / 2π`); used to convert a
+ *   world-unit pattern into px.
+ */
+export function dashArrayPx(dash: ResolvedDash, lengthPx: number, worldToPx = 0): [number, number] {
+  const scale = dash.units === 'world' && worldToPx > 0 ? worldToPx : Math.max(1, lengthPx);
   return [Math.max(1, dash.length * scale), Math.max(1, dash.gap * scale)];
 }
 
 function resolveDash(
   option: DashOptions | false | undefined,
   fallback: { length: number; gap: number; speed: number },
+  worldFallback: { length: number; gap: number; speed: number },
   color: string,
   width: number | undefined,
   strokeWidth: number | undefined,
@@ -225,11 +379,16 @@ function resolveDash(
     };
   }
   const o: DashOptions = typeof option === 'object' && option ? option : {};
+  const units = resolveDashUnits(o);
+  const defaults = units === 'world' ? worldFallback : fallback;
+  const [minPart, maxPart] =
+    units === 'world' ? [MIN_DASH_WORLD, MAX_DASH_WORLD] : [MIN_DASH_PART, MAX_DASH_PART];
   const dash: ResolvedDash = {
     color: o.color ?? color,
-    length: clamp(num(o.length, fallback.length), MIN_DASH_PART, MAX_DASH_PART),
-    gap: clamp(num(o.gap, fallback.gap), MIN_DASH_PART, MAX_DASH_PART),
-    speed: clamp(num(o.speed, fallback.speed), 0, 200),
+    length: clamp(num(o.length, defaults.length), minPart, maxPart),
+    gap: clamp(num(o.gap, defaults.gap), minPart, maxPart),
+    speed: clamp(num(o.speed, defaults.speed), 0, 200),
+    units,
   };
   return {
     dash,
@@ -263,6 +422,7 @@ function resolvePath(
   const resolved = resolveDash(
     dashOption,
     id === 'outbound' ? DEFAULT_OUTBOUND_DASH : DEFAULT_RETURN_DASH,
+    id === 'outbound' ? DEFAULT_OUTBOUND_DASH_WORLD : DEFAULT_RETURN_DASH_WORLD,
     color,
     specific.dash && typeof specific.dash === 'object' ? specific.dash.width : undefined,
     specific.dash && typeof specific.dash === 'object' ? specific.dash.width : undefined,

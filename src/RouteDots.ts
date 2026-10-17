@@ -142,8 +142,10 @@ export interface RouteDotsOptions {
   };
   /**
    * Hexagon tile overlay inside country borders (only when `surface` is
-   * `countries`). Spacing, opacity and colour are all customizable; set
-   * `enabled: true` to turn the overlay on.
+   * `countries`) — the hex twin of the `dots` surface's dot lattice.
+   * Spacing, tile size, border clearance, opacity and colour are all
+   * customizable, and every tile is clipped to its country so it never
+   * paints over a border line. Set `enabled: true` to turn it on.
    */
   hexTiles?: HexTilesOptions;
 }
@@ -208,6 +210,8 @@ export class RouteDots {
   private readonly container: HTMLElement;
   private readonly handlers = new Map<string, Set<EventHandler>>();
   private route: RouteDotsRouteInfo | null = null;
+  /** Fingerprint of the hex-tile options last pushed to the renderer. */
+  private lastHexTiles: string | null = null;
   private disposed = false;
 
   constructor(container: HTMLElement, options: RouteDotsOptions = {}) {
@@ -595,8 +599,16 @@ export class RouteDots {
     const o = this.options;
     const palette = this.palette;
 
+    // Country hex tiles are re-gridded (not just repainted) when their
+    // spacing / size / border clearance changes — and only then, because
+    // walking the country polygons is not free.
+    const hexFingerprint = JSON.stringify(o.hexTiles ?? null);
+    const hexTilesChanged = hexFingerprint !== this.lastHexTiles;
+    if (hexTilesChanged) this.lastHexTiles = hexFingerprint;
+
     if (this._mode === 'webgl' && this.globe) {
       this.globe.setColors(o.colors);
+      if (hexTilesChanged) this.globe.setHexTiles(o.hexTiles);
       this.globe.setInteractive(o.interactive === true);
       this.globe.setAutoRotate(o.autoRotate?.enabled !== false && this.route === null);
       this.layer?.applyStyle({
@@ -686,7 +698,7 @@ export class RouteDots {
           o.borders === undefined
             ? undefined
             : { enabled: o.borders.enabled, color: o.borders.color, width: o.borders.width },
-        hexTiles: o.hexTiles,
+        hexTiles: hexTilesChanged ? o.hexTiles : undefined,
         route: o.route,
         labels: o.labels,
         airports: o.airports,
@@ -788,6 +800,8 @@ export class RouteDots {
     }
     this._mode = 'webgl';
     this.palette = this.globe.palette;
+    // The fresh renderer already carries these tiles.
+    this.lastHexTiles = JSON.stringify(this.options.hexTiles ?? null);
 
     const layerOptions: RouteLayerOptions = {
       ...o.route,
@@ -915,6 +929,7 @@ export class RouteDots {
     };
     this.flat = new FlatRouteMap(this.container, flatOptions);
     this.palette = this.flat.activePalette;
+    this.lastHexTiles = JSON.stringify(this.options.hexTiles ?? null);
     this._mode = 'flat';
   }
 
