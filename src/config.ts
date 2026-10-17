@@ -108,6 +108,7 @@ const OPTION_KEYS = [
   'interactive',
   'texture',
   'borders',
+  'hexTiles',
   'route',
   'plane',
   'cities',
@@ -640,6 +641,22 @@ function sanitizeBorders(
   return finish(out);
 }
 
+function sanitizeHexTiles(
+  value: unknown,
+  path: string,
+  warnings: string[],
+): Record<string, unknown> | undefined {
+  const source = readObject(value, path, warnings);
+  if (!source) return undefined;
+  const out: Record<string, unknown> = {};
+  put(out, 'enabled', readBoolean(source.enabled, `${path}.enabled`, warnings));
+  put(out, 'spacingDeg', readNumber(source.spacingDeg, `${path}.spacingDeg`, warnings));
+  put(out, 'color', readString(source.color, `${path}.color`, warnings, 80));
+  put(out, 'opacity', readNumber(source.opacity, `${path}.opacity`, warnings));
+  noteUnknown(source, ['enabled', 'spacingDeg', 'color', 'opacity'], path, warnings);
+  return finish(out);
+}
+
 function sanitizeView(
   value: unknown,
   path: string,
@@ -716,6 +733,8 @@ function sanitizeFlat(
     put(out, 'camera3d', sanitizeCamera(source.camera3d, `${path}.camera3d`, warnings));
   if ('borders' in source)
     put(out, 'borders', sanitizeBorders(source.borders, `${path}.borders`, warnings));
+  if ('hexTiles' in source)
+    put(out, 'hexTiles', sanitizeHexTiles(source.hexTiles, `${path}.hexTiles`, warnings));
   if ('land' in source)
     warn(warnings, `${path}.land is not portable (the bundled land mask is used)`);
   noteUnknown(
@@ -735,6 +754,7 @@ function sanitizeFlat(
       'plane',
       'camera3d',
       'borders',
+      'hexTiles',
       'land',
     ],
     path,
@@ -789,6 +809,8 @@ export function sanitizeRouteDotsOptions(
     put(out, 'texture', sanitizeTexture(source.texture, `${path}.texture`, warnings));
   if ('borders' in source)
     put(out, 'borders', sanitizeBorders(source.borders, `${path}.borders`, warnings));
+  if ('hexTiles' in source)
+    put(out, 'hexTiles', sanitizeHexTiles(source.hexTiles, `${path}.hexTiles`, warnings));
   if ('route' in source) put(out, 'route', sanitizeRoute(source.route, `${path}.route`, warnings));
   if ('plane' in source) put(out, 'plane', sanitizePlane(source.plane, `${path}.plane`, warnings));
   if ('cities' in source)

@@ -20,6 +20,7 @@
 import landTopo from '../data/land-110m.js';
 import countriesTopo from '../data/countries-110m.js';
 import { buildDotGrid } from '../core/dotPattern.js';
+import { buildHexGrid } from '../core/hexPattern.js';
 import {
   decodeBorderArcs,
   decodeCountryPolygons,
@@ -40,6 +41,8 @@ import {
   type ResolvedFlatCamera3D,
 } from './camera3d.js';
 import { PlaneIcon, type PlaneIconSource } from '../routes/PlaneIcon.js';
+import { PlaneScheduler, type FlightLeg } from '../routes/PlaneScheduler.js';
+import { easeInOutCubic } from '../routes/easing.js';
 import type { ResolvedPathStyle, RouteStyleOptions } from '../routes/routeStyle.js';
 import { dashArrayPx, resolveRouteStyle, type ResolvedRouteStyle } from '../routes/routeStyle.js';
 import {
@@ -72,7 +75,7 @@ import {
   type RouteDotsColors,
   type RouteDotsPalette,
 } from '../theme.js';
-import type { City, LatLon, MapSurface } from '../types.js';
+import type { City, HexTilesOptions, LatLon, MapSurface } from '../types.js';
 
 export type { FlatTheme } from '../theme.js';
 
@@ -115,6 +118,8 @@ export interface FlatRouteMapOptions {
     /** Stroke width in px (default 1). */
     width?: number;
   };
+  /** Hexagon tile overlay inside country borders. */
+  hexTiles?: HexTilesOptions;
   /** Map canvas width in CSS px (default 1600). */
   width?: number;
   /** Palette overrides — the same object as the `colors` option. */
@@ -164,7 +169,7 @@ const CITY_CSS = `
 }
 @keyframes rd-dash-flow {
   from { stroke-dashoffset: 0; }
-  to { stroke-dashoffset: calc(-1 * var(--rd-dash-period, 20px)); }
+  to { stroke-dashoffset: calc(var(--rd-dash-dir, 1) * var(--rd-dash-period, 20px)); }
 }
 .rd-dash-flow {
   animation: rd-dash-flow var(--rd-dash-duration, 1000ms) linear infinite;
@@ -220,6 +225,8 @@ export class FlatRouteMap {
   private lastGeometries: FlatArcGeometry[] = [];
   private labelEls: SVGTextElement[] = [];
   private markerEls: SVGCircleElement[] = [];
+  private planeScheduler: PlaneScheduler | null = null;
+  private planeLeg: FlightLeg = 'outbound';
   private following = false;
   private lastFrameMs = 0;
   private pointerDown = false;
@@ -362,6 +369,7 @@ export class FlatRouteMap {
     this.route = { from: origin, to: dest, roundTrip: options.roundTrip === true };
     this.renderRoutes();
     this.routeStart = performance.now();
+    this.planeScheduler?.reset(this.routeStart);
   }
 
   /** Removes the current route (paths, markers, labels, plane). */
@@ -371,6 +379,7 @@ export class FlatRouteMap {
     this.outboundPath = null;
     this.planeStage = null;
     this.routeStart = null;
+    this.planeScheduler = null;
     this.labelEls = [];
     this.markerEls = [];
     this.planeGroup.style.display = 'none';
@@ -398,6 +407,7 @@ export class FlatRouteMap {
       options.stepDeg !== undefined ||
       options.width !== undefined ||
       options.land !== undefined ||
+      options.hexTiles !== undefined ||
       options.colors !== undefined ||
       options.theme !== undefined
     ) {
@@ -490,6 +500,53 @@ export class FlatRouteMap {
     )) {
       ctx.fill(new Path2D(path), 'evenodd');
     }
+    // Optional hex tile overlay inside country borders.
+    if (this.options.hexTiles?.enabled) {
+      this.renderHexTiles(this.options.hexTiles);
+    }
+  }
+
+  /**
+   * Draws pointy-top hex tiles inside country polygons — same axial grid as
+   * the globe overlay, rasterised directly to the flat canvas.
+   */
+  private renderHexTiles(hexOpts: HexTilesOptions): void {
+    const ctx = this.canvas.getContext('2d');
+    if (!ctx) return;
+    const polygons = decodeCountryPolygons(countriesTopo);
+    const pattern = buildHexGrid(polygons, { spacingDeg: hexOpts.spacingDeg });
+    const fillColor = hexOpts.color ?? this.theme.border;
+    const opacity = hexOpts.opacity ?? 0.35;
+    const rDeg = pattern.tiles[0]?.sizeDeg ?? 1;
+    const radiusPx = Math.max(1, (rDeg / 360) * this.width * 0.85);
+
+    ctx.save();
+    ctx.fillStyle = fillColor;
+    ctx.globalAlpha = Math.min(1, Math.max(0, opacity));
+    for (const tile of pattern.tiles) {
+      const [cx, cy] = this.project(tile);
+      // Antimeridian wrap: a tile whose centre is pushed onto the seam by
+      // the row offset must be drawn on both sides of the map.
+      const draws: [number, number][] = [[cx, cy]];
+      if (tile.lng > 180 - pattern.spacingDeg) draws.push([cx - this.width, cy]);
+      if (tile.lng < -180 + pattern.spacingDeg) draws.push([cx + this.width, cy]);
+      for (const [px, py] of draws) this.drawFlatHex(ctx, px, py, radiusPx);
+    }
+    ctx.restore();
+  }
+
+  /** Draws one pointy-top regular hexagon centred at (cx, cy) in canvas px. */
+  private drawFlatHex(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const angle = Math.PI / 6 + (Math.PI / 3) * i;
+      const x = cx + r * Math.cos(angle);
+      const y = cy + r * Math.sin(angle);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
   }
 
   private renderDots(stepDeg: number, topo: TopoLand): void {
@@ -577,19 +634,26 @@ export class FlatRouteMap {
     this.planeStage = null;
     this.labelEls = [];
     this.markerEls = [];
+    this.planeLeg = 'outbound';
     const route = this.route;
     if (!route) return;
 
     const geometries: FlatArcGeometry[] = [];
+    // Single edge by default for both one-way and round-trip: one shared
+    // path; round trips fly the plane along it in both directions. Pass
+    // dualEdge via route to opt into two visually distinct arcs.
     const outbound = this.addArc(route.from, route.to, this.routeStyle.outbound, 1);
     if (outbound) {
       geometries.push(outbound.geometry);
       this.outboundPath = outbound.path;
     }
-    if (route.roundTrip) {
-      const back = this.addArc(route.to, route.from, this.routeStyle.return, 1.25);
-      if (back) geometries.push(back.geometry);
-    }
+
+    const plane = this.options.plane ?? {};
+    this.planeScheduler = new PlaneScheduler({
+      flightMs: plane.flightMs ?? this.options.flightMs,
+      pauseMs: plane.pauseMs ?? this.options.pauseMs,
+      roundTrip: route.roundTrip,
+    });
 
     const [x1, y1] = this.project(route.from);
     const [x2, y2] = this.project(route.to);
@@ -636,12 +700,21 @@ export class FlatRouteMap {
       const [dash, gap] = dashArrayPx(style.dash, length);
       path.setAttribute('stroke-dasharray', `${roundPixel(dash)} ${roundPixel(gap)}`);
       if (style.dash.speed > 0) {
+        // --rd-dash-dir flips sign to reverse dash flow on return legs.
         path.style.setProperty('--rd-dash-period', `${roundPixel(dash + gap)}px`);
         path.style.setProperty('--rd-dash-duration', `${Math.round(1000 / style.dash.speed)}ms`);
+        path.style.setProperty('--rd-dash-dir', '1');
         path.setAttribute('class', 'rd-dash-flow');
       }
     }
     return { path, geometry };
+  }
+
+  /** Flips dash-flow direction on the shared edge to match `leg`. */
+  private setDashDirection(leg: FlightLeg): void {
+    if (!this.outboundPath) return;
+    this.outboundPath.style.setProperty('--rd-dash-dir', leg === 'return' ? '-1' : '1');
+    this.planeLeg = leg;
   }
 
   /** Adds a haloed city-name label near an endpoint marker. */
@@ -827,7 +900,7 @@ export class FlatRouteMap {
     const dtSec = Math.min(0.05, Math.max(0, (now - this.lastFrameMs) / 1000));
     this.lastFrameMs = now;
 
-    if (!this.outboundPath || this.routeStart === null) {
+    if (!this.outboundPath || this.routeStart === null || !this.planeScheduler) {
       this.planeGroup.style.display = 'none';
       return;
     }
@@ -836,12 +909,18 @@ export class FlatRouteMap {
       this.planeGroup.style.display = 'none';
       return;
     }
-    const flightMs = plane.flightMs ?? this.options.flightMs ?? 4500;
-    const pauseMs = plane.pauseMs ?? this.options.pauseMs ?? 700;
-    const elapsed = now - this.routeStart;
-    const cycle = flightMs + pauseMs;
-    const t = (elapsed % cycle) / flightMs;
-    if (t >= 1) {
+    // Anchor the scheduler on first frame (setRoute resets it, but the
+    // RAF loop may fire before the reset if mount is racing).
+    if (this.planeScheduler.progress(now) === null) {
+      this.planeScheduler.reset(this.routeStart);
+    }
+    const state = this.planeScheduler.progress(now);
+    if (state === null) {
+      // Pre first-flight delay: nothing to draw.
+      this.planeGroup.style.display = 'none';
+      return;
+    }
+    if (state.paused) {
       this.planeGroup.style.display = 'none';
       return;
     }
@@ -852,10 +931,19 @@ export class FlatRouteMap {
       this.planeGroup.style.display = 'none';
       return;
     }
+    this.setDashDirection(state.leg);
     const length = measure.call(this.outboundPath);
+    const easedT = easeInOutCubic(state.t);
+    // Return leg samples the path backwards so the plane flies to the
+    // origin along the same curve without a second SVG path.
+    const param = state.leg === 'return' ? 1 - easedT : easedT;
     const at = (distance: number) => this.outboundPath!.getPointAtLength(distance);
-    const pt = at(t * length);
-    const ahead = at(Math.min(length, t * length + 2));
+    const pt = at(param * length);
+    const aheadDistance =
+      state.leg === 'return'
+        ? Math.max(0, param * length - 2)
+        : Math.min(length, param * length + 2);
+    const ahead = at(aheadDistance);
     const angle = (Math.atan2(ahead.y - pt.y, ahead.x - pt.x) * 180) / Math.PI + 90;
     this.planeGroup.style.display = '';
     this.planeGroup.setAttribute(

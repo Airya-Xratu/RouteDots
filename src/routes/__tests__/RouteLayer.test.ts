@@ -11,8 +11,21 @@ const meshesWith = (layer: RouteLayer, geometry: new () => THREE.BufferGeometry)
   );
 
 describe('RouteLayer painter ordering', () => {
-  it('stacks outbound (1) below return (2) below pulses (3)', () => {
+  it('round trip (single edge): one tube at renderOrder 1, pulses at 3', () => {
     const layer = new RouteLayer(new THREE.Group(), { theme: 'light', pulse: true });
+    layer.setRoute(LHR, DXB, true);
+
+    const arcs = meshesWith(layer, THREE.TubeGeometry);
+    expect(arcs).toHaveLength(1);
+    expect(arcs[0]!.renderOrder).toBe(1);
+
+    const pulses = meshesWith(layer, THREE.RingGeometry);
+    expect(pulses).toHaveLength(4);
+    expect(pulses.every((m) => m.renderOrder === 3)).toBe(true);
+  });
+
+  it('dualEdge round trip: outbound (1) below return (2) below pulses (3)', () => {
+    const layer = new RouteLayer(new THREE.Group(), { theme: 'light', pulse: true, dualEdge: true });
     layer.setRoute(LHR, DXB, true);
 
     const arcs = meshesWith(layer, THREE.TubeGeometry);

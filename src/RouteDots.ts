@@ -55,7 +55,7 @@ import {
   type ParsedRouteDotsConfig,
   type RouteDotsConfig,
 } from './config.js';
-import type { City, LatLon, MapSurface, WorldMode } from './types.js';
+import type { City, HexTilesOptions, LatLon, MapSurface, WorldMode } from './types.js';
 
 export type RouteDotsMode = 'webgl' | 'flat';
 
@@ -140,6 +140,12 @@ export interface RouteDotsOptions {
     /** Flat stroke width in px (default 1). */
     width?: number;
   };
+  /**
+   * Hexagon tile overlay inside country borders (only when `surface` is
+   * `countries`). Spacing, opacity and colour are all customizable; set
+   * `enabled: true` to turn the overlay on.
+   */
+  hexTiles?: HexTilesOptions;
 }
 
 export interface RouteDotsRouteOptions {
@@ -312,14 +318,20 @@ export class RouteDots {
     if (this._mode === 'webgl' && this.globe && this.layer) {
       const spec = this.layer.setRoute(a, b, roundTrip);
       if (this.plane && this.options.plane?.enabled !== false) {
-        const outbound = spec.arcs[0]!;
-        const style = this.layer.resolvedStyle.outbound;
+        const arc = spec.arcs[0]!;
+        const style = arc.id === 'return' ? this.layer.resolvedStyle.return : this.layer.resolvedStyle.outbound;
         this.plane.setArc(
-          outbound.from,
-          outbound.to,
+          arc.from,
+          arc.to,
           { lift: style.lift, angle: style.angle },
           performance.now(),
+          { roundTrip: spec.roundTrip && spec.singleEdge },
         );
+        // Wire the plane's flight state into the route layer so dashes / trail
+        // stay in sync with the plane on single-edge round trips.
+        this.plane.setFlightStateCallback((leg, t) => {
+          this.layer?.setFlightState(leg, t);
+        });
       }
       const airports = resolveAirportsStyle(this.palette, this.options.airports);
       this.pins?.setPoints([
@@ -598,7 +610,21 @@ export class RouteDots {
         this.plane?.dispose();
         this.plane = null;
       } else if (!this.plane && this.globe) {
-        this.plane = this.createPlane();
+        const plane = this.createPlane(this.route?.roundTrip ?? false);
+        this.plane = plane;
+        if (this.route && this.layer && plane) {
+          const style = this.layer.resolvedStyle.outbound;
+          plane.setArc(
+            this.route.from,
+            this.route.to,
+            { lift: style.lift, angle: style.angle },
+            performance.now(),
+            { roundTrip: this.route.roundTrip },
+          );
+          plane.setFlightStateCallback((leg, t) => {
+            this.layer?.setFlightState(leg, t);
+          });
+        }
       }
       this.plane?.applyStyle({
         size: o.plane?.size,
@@ -608,18 +634,23 @@ export class RouteDots {
         pauseMs: o.plane?.pauseMs,
         startDelayMs: o.plane?.startDelayMs,
         icon: o.plane?.icon,
+        roundTrip: this.route?.roundTrip ?? false,
       });
       // Keep the plane on the arc it should fly: a live restyle may have
       // changed the curve (angle / lift), and a freshly-enabled plane needs
       // its arc in the first place.
       if (this.plane && this.route && this.layer) {
-        const outbound = this.layer.resolvedStyle.outbound;
+        const style = this.layer.resolvedStyle.outbound;
         this.plane.setArc(
           this.route.from,
           this.route.to,
-          { lift: outbound.lift, angle: outbound.angle },
+          { lift: style.lift, angle: style.angle },
           performance.now(),
+          { roundTrip: this.route.roundTrip },
         );
+        this.plane.setFlightStateCallback((leg, t) => {
+          this.layer?.setFlightState(leg, t);
+        });
       }
       if (o.cities?.enabled === false) {
         this.cityMarkers?.dispose();
@@ -655,6 +686,7 @@ export class RouteDots {
           o.borders === undefined
             ? undefined
             : { enabled: o.borders.enabled, color: o.borders.color, width: o.borders.width },
+        hexTiles: o.hexTiles,
         route: o.route,
         labels: o.labels,
         airports: o.airports,
@@ -680,7 +712,7 @@ export class RouteDots {
   }
 
   /** Creates the plane layer from the current options. */
-  private createPlane(): PlaneLayer | null {
+  private createPlane(roundTrip = false): PlaneLayer | null {
     if (!this.globe) return null;
     const o = this.options;
     return new PlaneLayer(this.globe.globeGroup, {
@@ -691,6 +723,7 @@ export class RouteDots {
       pauseMs: o.plane?.pauseMs,
       startDelayMs: o.plane?.startDelayMs,
       icon: o.plane?.icon,
+      roundTrip,
     });
   }
 
@@ -732,6 +765,7 @@ export class RouteDots {
       interactive: o.interactive,
       texture: o.texture,
       land: o.land,
+      hexTiles: o.hexTiles,
       borders:
         o.borders === undefined
           ? undefined
@@ -773,6 +807,7 @@ export class RouteDots {
         pauseMs: o.plane?.pauseMs,
         startDelayMs: o.plane?.startDelayMs,
         icon: o.plane?.icon,
+        roundTrip: false,
       });
     }
 
@@ -876,6 +911,7 @@ export class RouteDots {
               color: o.borders.color,
               width: o.borders.width,
             },
+      hexTiles: o.hexTiles,
     };
     this.flat = new FlatRouteMap(this.container, flatOptions);
     this.palette = this.flat.activePalette;

@@ -1,14 +1,20 @@
 /**
  * RouteLayer — renders the flight route on top of the globe:
  *
- * - one tube per arc (outbound + optional return) with distinct lifts (and
- *   optional curve angles) so the two curves never conflict,
- * - a draw-on animation (origin → destination) with a stagger for the return,
- * - flowing dashes whose direction matches the arc's travel direction, fully
+ * - one tube per arc. One-way routes use a single outbound tube; round
+ *   trips share **one edge** (single tube) by default, with the dashes
+ *   reversing direction as the plane flies back, and a growing trail
+ *   behind the plane. Pass `dualEdge: true` in `route` to get the
+ *   historical two-tube look with different lifts per leg.
+ * - a draw-on animation (origin → destination) with a stagger for dual-edge
+ *   returns,
+ * - flowing dashes whose direction matches the plane's heading, fully
  *   customisable per path (colour, length, gap, width, speed),
  * - endpoint markers with a one-shot pulse ring when a route is set.
  *
- * The layer is driven by the renderer's frame loop via `update(time)`.
+ * The layer is driven by the renderer's frame loop via `update(time)`,
+ * and by the plane layer via `setFlightState(...)` so the dash direction
+ * and trail mask track the plane's position.
  */
 import * as THREE from 'three';
 import { latLngToVec } from '../core/greatCircle.js';
@@ -32,6 +38,7 @@ import {
   type ResolvedRouteStyle,
   type RouteStyleOptions,
 } from './routeStyle.js';
+import type { FlightLeg } from './PlaneScheduler.js';
 
 export interface RouteLayerTheme {
   outbound: { color: string; opacity: number };
@@ -55,6 +62,11 @@ export interface RouteLayerOptions extends RouteStyleOptions {
   airports?: AirportsStyleOptions;
   /** Pre-resolved styles (skips resolving `route` options again). */
   style?: ResolvedRouteStyle;
+  /**
+   * Use two separate tubes (outbound + return) for round trips instead of
+   * the default single shared edge. Mirrors {@link BuildRouteOptions.dualEdge}.
+   */
+  dualEdge?: boolean;
 }
 
 interface ArcObject {
@@ -83,9 +95,13 @@ export class RouteLayer {
   private pulses: Pulse[] = [];
   private drawStart: number | null = null;
   private route: RouteSpec | null = null;
-  private lastRoute: { origin: LatLon; dest: LatLon; roundTrip: boolean } | null = null;
+  private lastRoute: { origin: LatLon; dest: LatLon; roundTrip: boolean; dualEdge?: boolean } | null =
+    null;
   private lastTime: number | null = null;
   private onDrawnCallback: (() => void) | null = null;
+  /** Plane state for trail/direction (single-edge round trips). */
+  private flightLeg: FlightLeg = 'outbound';
+  private flightT: number = 1;
 
   constructor(parent: THREE.Object3D, options: RouteLayerOptions = {}) {
     const theme = options.theme ?? 'light';
@@ -117,10 +133,22 @@ export class RouteLayer {
     this.onDrawnCallback = callback;
   }
 
+  /**
+   * Notifies the layer about the plane's current leg/progress so the trail
+   * visibility and dash direction stay in sync. No-op for dual-edge round
+   * trips (each tube carries its own constant direction).
+   */
+  setFlightState(leg: FlightLeg, t: number): void {
+    this.flightLeg = leg;
+    this.flightT = Math.min(1, Math.max(0, t));
+  }
+
   /** Sets a new route, replacing the previous one. */
   setRoute(origin: LatLon, dest: LatLon, roundTrip = false): RouteSpec {
+    const dualEdge = this.options.dualEdge === true;
     const spec = buildRoute(origin, dest, {
       roundTrip,
+      dualEdge,
       outboundLift: this.style.outbound.lift,
       returnLift: this.style.return.lift,
       outboundAngle: this.style.outbound.angle,
@@ -128,9 +156,11 @@ export class RouteLayer {
     });
     this.clearArcs();
     this.route = spec;
-    this.lastRoute = { origin, dest, roundTrip };
+    this.lastRoute = { origin, dest, roundTrip, dualEdge };
     this.drawStart = null;
     this.lastTime = null;
+    this.flightLeg = 'outbound';
+    this.flightT = 0;
 
     for (const arcSpec of spec.arcs) {
       this.arcs.push(this.buildArc(arcSpec, this.styleFor(arcSpec), 0));
@@ -157,8 +187,10 @@ export class RouteLayer {
     if (this.lastRoute) {
       const progress = this.arcs.map((arc) => arcProgress(arc));
       const pulses = this.pulses.length > 0 && this.style.pulse;
+      const dualEdge = merged.dualEdge === true;
       const spec = buildRoute(this.lastRoute.origin, this.lastRoute.dest, {
         roundTrip: this.lastRoute.roundTrip,
+        dualEdge,
         outboundLift: this.style.outbound.lift,
         returnLift: this.style.return.lift,
         outboundAngle: this.style.outbound.angle,
@@ -195,6 +227,15 @@ export class RouteLayer {
         uniforms.uProgress.value = easeOutCubic(t);
         uniforms.uTime.value = time / 1000;
       }
+      // Single-edge round trip: push flight direction/trail into the shader.
+      if (arc.spec.id === 'roundtrip' && uniforms.uDirection && uniforms.uTrail) {
+        const dir = this.flightLeg === 'return' ? -1 : 1;
+        // Don't apply the trail mask until after the initial draw-on finishes
+        // (the draw edge handles reveal while the line is being drawn).
+        const trail = t < 1 ? 1 : this.flightT;
+        uniforms.uDirection.value = dir;
+        uniforms.uTrail.value = trail;
+      }
       if (t < 1) allDone = false;
       arc.mesh.visible = t > 0;
     }
@@ -223,6 +264,8 @@ export class RouteLayer {
     this.route = null;
     this.lastRoute = null;
     this.onDrawnCallback = null;
+    this.flightLeg = 'outbound';
+    this.flightT = 1;
   }
 
   dispose(): void {
@@ -231,43 +274,43 @@ export class RouteLayer {
   }
 
   private styleFor(spec: RouteArcSpec): ResolvedPathStyle {
-    return spec.id === 'outbound' ? this.style.outbound : this.style.return;
+    // Roundtrip arc shares the outbound style; dual-edge return arcs use
+    // the return style.
+    return spec.id === 'return' ? this.style.return : this.style.outbound;
   }
 
   private buildArc(spec: RouteArcSpec, style: ResolvedPathStyle, progress = 0): ArcObject {
     const curve = new GreatCircleCurve(spec.from, spec.to, spec.lift, spec.angle);
-    // `width` may be authored in px (docs / studio) — convert it to a sane
-    // tube radius (a raw px value built a planet-sized tube: globeTubeRadius).
     const geometry = new THREE.TubeGeometry(curve, 128, globeTubeRadius(style.width), 8, false);
     const dash = style.dash ? dashUniforms(style.dash) : null;
+    const uniforms: Record<string, THREE.IUniform> = {
+      uColor: { value: new THREE.Color(style.dash?.color ?? style.color) },
+      uOpacity: { value: style.opacity },
+      uProgress: { value: progress },
+      uTime: { value: 0 },
+      uDashCount: { value: dash?.dashCount ?? 1 },
+      uDashSolid: { value: dash?.dashSolid ?? 1 },
+      uFlow: { value: dash?.flow ?? 0 },
+      uDirection: { value: 1 },
+      uTrail: { value: 1 },
+    };
     const material = new THREE.ShaderMaterial({
       vertexShader: ROUTE_VERTEX,
       fragmentShader: ROUTE_FRAGMENT,
       transparent: true,
       depthWrite: false,
-      uniforms: {
-        uColor: { value: new THREE.Color(style.dash?.color ?? style.color) },
-        uOpacity: { value: style.opacity },
-        uProgress: { value: progress },
-        uTime: { value: 0 },
-        uDashCount: { value: dash?.dashCount ?? 1 },
-        uDashSolid: { value: dash?.dashSolid ?? 1 },
-        uFlow: { value: dash?.flow ?? 0 },
-      },
+      uniforms,
     });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.visible = progress > 0;
-    // Depth-independent painter layering: the return arc always draws above
-    // the outbound (order 1 / 2), pulses (3) and the plane (4) above both —
-    // "there and back" stays readable even where the arcs overlap.
-    mesh.renderOrder = 1 + spec.order;
+    // Depth-independent painter layering: roundtrip/outbound at order 1,
+    // dual-edge return draws above at 2, pulses (3), plane (4).
+    mesh.renderOrder = 1 + (spec.id === 'return' ? 1 : 0);
     this.group.add(mesh);
     return { spec, style, mesh };
   }
 
   private buildMarkers(origin: LatLon, dest: LatLon): void {
-    // One style per endpoint — the source and the destination can be told
-    // apart (colour / size) via the `airports` option.
     const endpoints: { point: LatLon; style: ResolvedAirportEndpoint }[] = [
       { point: origin, style: this.airports.source },
       { point: dest, style: this.airports.destination },

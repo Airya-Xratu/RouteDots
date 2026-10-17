@@ -23,6 +23,7 @@ export * from './core/antimeridian.js';
 export * from './core/topojson.js';
 export * from './core/landRaster.js';
 export * from './core/dotPattern.js';
+export * from './core/hexPattern.js';
 export * from './core/greatCircle.js';
 
 // Airport-city markers (blink timing + the tunable ripple)
@@ -41,6 +42,7 @@ export * from './globe/CityMarkersLayer.js';
 export * from './globe/cameraRig.js';
 export * from './globe/layerRadii.js';
 export * from './globe/dotTexture.js';
+export * from './globe/hexTexture.js';
 export * from './globe/countrySurface.js';
 export * from './globe/atmosphere.js';
 export * from './globe/BordersLayer.js';

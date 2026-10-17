@@ -1,10 +1,16 @@
 /**
- * PlaneLayer — a plane icon that repeatedly flies the outbound arc.
+ * PlaneLayer — a plane icon that repeatedly flies the route arc.
  *
- * The sprite follows the same lifted *and banked* arc as the outbound tube
+ * The sprite follows the same lifted *and banked* arc as the route tube
  * (plus a hair of clearance) through the shared `arcPoint` maths, is oriented
  * along its ground track by projecting the tangent into camera space, and is
  * hidden while the scheduler is in its pause phase.
+ *
+ * For **round-trip** routes (single-edge mode) the scheduler hands back both
+ * a leg (`'outbound'` or `'return'`) and a progress, and the plane flies the
+ * arc in that direction — no second tube. A `flightStateCallback` notifies
+ * the RouteLayer each frame so the dash direction and trail mask track the
+ * plane.
  *
  * The icon itself is a swappable component — see {@link PlaneIcon}: pass a
  * preset name, custom SVG path data, or your own canvas paint function.
@@ -15,7 +21,7 @@ import type { LatLon } from '../types.js';
 import { arcPoint, type ArcShape } from './arcPath.js';
 import { easeInOutCubic } from './easing.js';
 import { PlaneIcon, type PlaneIconSource } from './PlaneIcon.js';
-import { PlaneScheduler } from './PlaneScheduler.js';
+import { PlaneScheduler, type FlightLeg, type FlightProgress } from './PlaneScheduler.js';
 
 export interface PlaneLayerOptions {
   /** Sprite size in globe units (default 0.024). */
@@ -26,8 +32,10 @@ export interface PlaneLayerOptions {
   clearance?: number;
   flightMs?: number;
   pauseMs?: number;
-  /** Delay before the first flight (ms, default 0). */
+  /** Delay before the first flight in ms (default 0). */
   startDelayMs?: number;
+  /** True for round-trip (outbound → pause → return → pause). */
+  roundTrip?: boolean;
   /**
    * The airplane icon: a preset name (`'airliner'` | `'jet'` | `'arrow'` |
    * `'dot'`), SVG path data, a `PlaneIcon`, or a custom draw function.
@@ -53,6 +61,8 @@ export class PlaneLayer {
   private anchorMs: number | null = null;
   private readonly tmp1 = new THREE.Vector3();
   private readonly tmp2 = new THREE.Vector3();
+  /** Called every flying frame so the route layer can sync dashes/trail. */
+  private onFlight?: (leg: FlightLeg, t: number) => void;
 
   constructor(parent: THREE.Object3D, options: PlaneLayerOptions = {}) {
     this.options = { ...options };
@@ -62,6 +72,7 @@ export class PlaneLayer {
       flightMs: options.flightMs,
       pauseMs: options.pauseMs,
       startDelayMs: options.startDelayMs,
+      roundTrip: options.roundTrip,
     });
 
     this.texture = new THREE.CanvasTexture(this.paintIcon());
@@ -83,6 +94,11 @@ export class PlaneLayer {
     parent.add(this.sprite);
   }
 
+  /** Registers a callback invoked every frame with the plane's leg/progress. */
+  setFlightStateCallback(cb: (leg: FlightLeg, t: number) => void): void {
+    this.onFlight = cb;
+  }
+
   /** The icon component in use. */
   get planeIcon(): PlaneIcon {
     return this.icon;
@@ -100,11 +116,23 @@ export class PlaneLayer {
    * `{ lift, angle }` arc shape, so the plane flies the same curve as its
    * route tube.
    */
-  setArc(from: LatLon, to: LatLon, shape: number | ArcShape, timeMs: number): void {
+  setArc(
+    from: LatLon,
+    to: LatLon,
+    shape: number | ArcShape,
+    timeMs: number,
+    opts: { roundTrip?: boolean } = {},
+  ): void {
     this.shape = typeof shape === 'number' ? { lift: shape, angle: 0 } : { ...shape };
     this.va = latLngToVec(from.lat, from.lng);
     this.vb = latLngToVec(to.lat, to.lng);
     this.anchorMs = timeMs;
+    this.scheduler = new PlaneScheduler({
+      flightMs: this.options.flightMs,
+      pauseMs: this.options.pauseMs,
+      startDelayMs: this.options.startDelayMs,
+      roundTrip: opts.roundTrip ?? this.options.roundTrip,
+    });
     this.scheduler.reset(timeMs);
   }
 
@@ -121,29 +149,36 @@ export class PlaneLayer {
   applyStyle(options: Partial<PlaneLayerOptions>): void {
     const next = { ...this.options, ...options };
     const iconChanged = next.icon !== this.options.icon || next.color !== this.options.color;
+    const timingChanged =
+      next.flightMs !== this.options.flightMs ||
+      next.pauseMs !== this.options.pauseMs ||
+      next.startDelayMs !== this.options.startDelayMs ||
+      next.roundTrip !== this.options.roundTrip;
     this.options = next;
     if (iconChanged) this.setIcon(next.icon);
     if (next.size !== undefined) this.sprite.scale.set(next.size, next.size, 1);
-    if (
-      next.flightMs !== undefined ||
-      next.pauseMs !== undefined ||
-      next.startDelayMs !== undefined
-    ) {
+    if (timingChanged) {
       this.scheduler = new PlaneScheduler({
         flightMs: next.flightMs,
         pauseMs: next.pauseMs,
         startDelayMs: next.startDelayMs,
+        roundTrip: next.roundTrip,
       });
       if (this.anchorMs !== null) this.scheduler.reset(this.anchorMs);
     }
   }
 
-  private lastProgress: number | null = null;
+  private lastProgress: FlightProgress | null = null;
   private lastGround: LatLon | null = null;
 
-  /** Route progress of the last frame: 0→1 while flying, null while paused. */
+  /** Route progress of the last frame, or null while paused/delayed. */
   getProgress(): number | null {
-    return this.lastProgress;
+    return this.lastProgress && !this.lastProgress.paused ? this.lastProgress.t : null;
+  }
+
+  /** Current flight leg (useful for camera logic during return flights). */
+  getCurrentLeg(): FlightLeg | null {
+    return this.lastProgress ? this.lastProgress.leg : null;
   }
 
   /**
@@ -158,31 +193,41 @@ export class PlaneLayer {
   /** Advances the plane. `timeMs` is the frame timestamp. */
   update(timeMs: number, camera: THREE.Camera): void {
     if (!this.va || !this.vb) return;
-    // Scheduler stays linear; easing shapes the *motion* (gentle take-off
-    // and landing), not the fly/pause timing.
-    const raw = this.scheduler.progress(timeMs);
-    this.lastProgress = raw;
-    if (raw === null) {
+    const state = this.scheduler.progress(timeMs);
+    this.lastProgress = state;
+    if (state === null || state.paused) {
       this.sprite.visible = false;
+      // During destination pause, snap the trail to full for a moment so the
+      // outbound line stays whole; at origin pause we likewise reveal the
+      // return tube fully. But we simply leave the trail at its last value
+      // (1 at the end of a leg) which is correct.
       return;
     }
-    const t = easeInOutCubic(raw);
+
+    const t = easeInOutCubic(state.t);
+    // For the return leg we fly the curve backwards: sample at 1 - t on the
+    // A→B arc to get B→A without building a second curve.
+    const param = state.leg === 'return' ? 1 - t : t;
 
     const shape: ArcShape = {
       lift: (this.shape.lift ?? 0) + this.clearance,
       angle: this.shape.angle,
     };
-    const s = arcPoint(this.va, this.vb, t, shape);
+    const s = arcPoint(this.va, this.vb, param, shape);
     this.sprite.position.set(s[0], s[1], s[2]);
     this.lastGround = vecToLatLng([s[0], s[1], s[2]]);
     this.sprite.visible = true;
 
+    // Notify the route layer so it can flip dashes / trail.
+    this.onFlight?.(state.leg, state.t);
+
     // Heading: project a short tangent into camera space.
     const eps = 0.002;
-    const s2 = arcPoint(this.va, this.vb, Math.min(1, t + eps), shape);
+    const paramAhead = Math.min(1, param + (state.leg === 'return' ? -eps : eps));
+    const paramAheadClamped = Math.max(0, Math.min(1, paramAhead));
+    const s2 = arcPoint(this.va, this.vb, paramAheadClamped, shape);
     this.tmp1.copy(this.sprite.position);
     this.tmp2.set(s2[0], s2[1], s2[2]);
-    // world positions (globe group is at the origin, no transform)
     const c1 = this.tmp1.clone().applyMatrix4(camera.matrixWorldInverse);
     const c2 = this.tmp2.clone().applyMatrix4(camera.matrixWorldInverse);
     const dx = c2.x - c1.x;
