@@ -11,8 +11,10 @@
  */
 import * as THREE from 'three';
 import landTopo from '../data/land-110m.js';
+import countriesTopo from '../data/countries-110m.js';
 import { buildDotGrid, type DotPattern } from '../core/dotPattern.js';
-import { decodeRings, type TopoLand } from '../core/topojson.js';
+import { buildHexGrid, type HexPattern } from '../core/hexPattern.js';
+import { decodeCountryPolygons, decodeRings, type TopoLand } from '../core/topojson.js';
 import {
   PALETTES,
   paletteToGlobeTheme,
@@ -23,9 +25,10 @@ import {
 } from '../theme.js';
 import { CameraRig, type ViewState } from './cameraRig.js';
 import { createDotTexture } from './dotTexture.js';
+import { createHexTexture } from './hexTexture.js';
 import { createAtmosphere } from './atmosphere.js';
 import { BordersLayer } from './BordersLayer.js';
-import type { MapSurface } from '../types.js';
+import type { HexTilesOptions, MapSurface } from '../types.js';
 import { CountrySurfaceLayer } from './countrySurface.js';
 import { LAYER_RADIUS } from './layerRadii.js';
 
@@ -73,6 +76,8 @@ export interface GlobeRendererOptions {
   interactive?: boolean;
   /** Replace the bundled land mask. */
   land?: TopoLand;
+  /** Hexagon tile overlay inside country borders. */
+  hexTiles?: HexTilesOptions;
   /** Country border lines (default enabled). */
   borders?: {
     enabled?: boolean;
@@ -126,10 +131,15 @@ export class GlobeRenderer {
   private paletteValue: RouteDotsPalette;
   private dotTexture: THREE.CanvasTexture | null = null;
   private readonly dotPattern: DotPattern | null = null;
+  private hexMesh: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial> | null = null;
+  private hexTexture: THREE.CanvasTexture | null = null;
+  private hexPattern: HexPattern | null = null;
+  private hexOptions: HexTilesOptions | undefined;
 
   constructor(container: HTMLElement, options: GlobeRendererOptions = {}) {
     this.container = container;
     this.options = options;
+    this.hexOptions = options.hexTiles;
 
     const palette = resolvePalette(options.theme ?? 'light', options.colors);
     this.paletteValue = palette;
@@ -185,6 +195,11 @@ export class GlobeRenderer {
       surface === 'countries'
         ? new CountrySurfaceLayer(this.globeGroup, { color: themeColors.countries })
         : null;
+
+    // Hex tile overlay (only on 'countries' surface, when enabled).
+    if (surface === 'countries' && options.hexTiles?.enabled) {
+      this.buildHexOverlay(themeColors.borders, options.hexTiles, options.texture?.width);
+    }
 
     this.borders =
       options.borders?.enabled === false
@@ -288,10 +303,71 @@ export class GlobeRenderer {
 
     this.countries?.setColor(themeColors.countries);
     this.borders?.setColor(themeColors.borders);
+    // Hex overlay repaint — colour may come from options or fall back to
+    // the theme's border colour (light hexes over grey fills).
+    if (this.hexMesh && this.hexPattern && this.hexOptions?.enabled) {
+      this.repaintHex(themeColors.borders);
+    }
     const atmosphereMaterial = this.atmosphere.material as THREE.ShaderMaterial;
     (atmosphereMaterial.uniforms.uColor?.value as THREE.Color | undefined)?.set(
       themeColors.atmosphere,
     );
+  }
+
+  /** Builds or rebuilds the hex-tile overlay shell on top of the country fills. */
+  private buildHexOverlay(fallbackColor: string, hexOpts: HexTilesOptions, texWidth?: number): void {
+    // Tear down any previous overlay.
+    if (this.hexMesh) {
+      this.hexMesh.removeFromParent();
+      this.hexMesh.geometry.dispose();
+      (this.hexMesh.material as THREE.Material).dispose();
+      this.hexMesh = null;
+    }
+    if (this.hexTexture) {
+      this.hexTexture.dispose();
+      this.hexTexture = null;
+    }
+
+    const polygons = decodeCountryPolygons(countriesTopo);
+    const pattern = buildHexGrid(polygons, { spacingDeg: hexOpts.spacingDeg });
+    this.hexPattern = pattern;
+
+    const tex = createHexTexture(pattern, {
+      width: texWidth,
+      color: hexOpts.color ?? fallbackColor,
+      opacity: hexOpts.opacity,
+    });
+    this.hexTexture = tex.texture;
+
+    const material = new THREE.MeshBasicMaterial({
+      map: tex.texture,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.FrontSide,
+    });
+    // Sit just above the country shell so hex tiles float on the fills but
+    // stay below border lines.
+    const radius = LAYER_RADIUS.countries + 0.0008;
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 96, 96), material);
+    mesh.renderOrder = 0;
+    this.globeGroup.add(mesh);
+    this.hexMesh = mesh;
+  }
+
+  /** Repaints the hex overlay texture (live colour/opacity change). */
+  private repaintHex(fallbackColor: string): void {
+    if (!this.hexPattern || !this.hexOptions) return;
+    const tex = createHexTexture(this.hexPattern, {
+      width: this.options.texture?.width,
+      color: this.hexOptions.color ?? fallbackColor,
+      opacity: this.hexOptions.opacity,
+    });
+    if (this.hexTexture) this.hexTexture.dispose();
+    this.hexTexture = tex.texture;
+    if (this.hexMesh) {
+      this.hexMesh.material.map = tex.texture;
+      this.hexMesh.material.needsUpdate = true;
+    }
   }
 
   resize(width?: number, height?: number): void {
@@ -322,6 +398,12 @@ export class GlobeRenderer {
     this.frameCallbacks.clear();
     this.borders?.dispose();
     this.countries?.dispose();
+    if (this.hexMesh) {
+      this.hexMesh.removeFromParent();
+      this.hexMesh.geometry.dispose();
+      (this.hexMesh.material as THREE.Material).dispose();
+    }
+    this.hexTexture?.dispose();
     this.globeMesh.geometry.dispose();
     this.globeMesh.material.dispose();
     (this.atmosphere.material as THREE.Material).dispose();
