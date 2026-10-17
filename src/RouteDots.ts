@@ -47,6 +47,14 @@ import { angularDistance, DEG, greatCircleMidpoint } from './core/greatCircle.js
 import type { TopoLand } from './core/topojson.js';
 import { resolvePalette, type RouteDotsColors, type RouteDotsPalette } from './theme.js';
 import { CITIES, resolveCity, type CityRef } from './cities.js';
+import {
+  createRouteDotsConfig,
+  parseRouteDotsConfig,
+  RouteDotsConfigError,
+  stringifyRouteDotsConfig,
+  type ParsedRouteDotsConfig,
+  type RouteDotsConfig,
+} from './config.js';
 import type { City, LatLon, MapSurface, WorldMode } from './types.js';
 
 export type RouteDotsMode = 'webgl' | 'flat';
@@ -405,6 +413,96 @@ export class RouteDots {
       return;
     }
     this.applyLive();
+  }
+
+  /**
+   * Replaces the option set — unlike {@link setOptions}, which merges — and
+   * remounts the renderer, keeping the current route. This is what a full
+   * config import does, so keys the new document omits fall back to defaults
+   * instead of lingering from the previous scene.
+   */
+  replaceOptions(options: RouteDotsOptions): void {
+    if (this.disposed) return;
+    this.options = { theme: 'light', ...cloneOptions(options) };
+    this.palette = resolvePalette(this.options.theme ?? 'light', this.options.colors);
+    this.remount();
+  }
+
+  /**
+   * Applies a portable config — the JSON the showcase exports.
+   *
+   * A versioned document replaces the option set. A bare options object
+   * merges, like {@link setOptions}. When the document includes `route`, that
+   * flight is drawn; `"route": null` clears it. Returns the parsed document
+   * (including any keys that were dropped) so a host can surface warnings.
+   *
+   * ```ts
+   * import config from './routedots.config.json';
+   * rd.applyConfig(config);
+   * ```
+   */
+  applyConfig(input: string | unknown): ParsedRouteDotsConfig {
+    if (this.disposed) throw new RouteDotsConfigError('RouteDots has been disposed');
+    const parsed = parseRouteDotsConfig(input);
+    if (parsed.kind === 'document') {
+      // Drop the previous route before remounting when the document says so,
+      // otherwise remount would redraw it.
+      if (parsed.routeSpecified) this.route = null;
+      this.replaceOptions(parsed.options);
+    } else {
+      this.setOptions(parsed.options);
+    }
+    if (parsed.route) {
+      const ok = this.setRoute(parsed.route.from, parsed.route.to, {
+        roundTrip: parsed.route.roundTrip ?? false,
+      });
+      if (!ok) {
+        parsed.warnings.push('route could not be drawn (unknown city or identical endpoints)');
+      }
+    }
+    return parsed;
+  }
+
+  /**
+   * The live scene as a portable config document. Safe to `JSON.stringify`
+   * and load later with {@link RouteDots.applyConfig} or
+   * {@link RouteDots.fromConfig}. Custom draw functions and land masks are
+   * omitted — they are not JSON.
+   */
+  exportConfig(meta?: { name?: string }): RouteDotsConfig {
+    return createRouteDotsConfig(this.getOptions(), this.getRoute(), meta).config;
+  }
+
+  /** {@link exportConfig} as pretty-printed JSON. */
+  toConfigJSON(meta?: { name?: string }, space = 2): string {
+    return stringifyRouteDotsConfig(this.exportConfig(meta), space);
+  }
+
+  /**
+   * Mounts a scene from a portable config document (or a bare options object).
+   * `overrides` are merged on top, so a project can keep the studio's look
+   * and still pin `world` or a container-specific `view`.
+   *
+   * ```ts
+   * import config from './routedots.config.json';
+   *
+   * const rd = RouteDots.fromConfig(document.getElementById('hero')!, config);
+   * ```
+   */
+  static fromConfig(
+    container: HTMLElement,
+    input: string | unknown,
+    overrides?: RouteDotsOptions,
+  ): RouteDots {
+    const parsed = parseRouteDotsConfig(input);
+    const options = overrides ? mergeOptions(parsed.options, overrides) : parsed.options;
+    const rd = new RouteDots(container, options);
+    if (parsed.route) {
+      rd.setRoute(parsed.route.from, parsed.route.to, {
+        roundTrip: parsed.route.roundTrip ?? false,
+      });
+    }
+    return rd;
   }
 
   /** Switches the world ('auto' | 'globe' | 'flat') and re-draws the route. */

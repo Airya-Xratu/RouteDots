@@ -482,6 +482,62 @@
       .studio-actions button:hover {
         border-color: #6b7280;
       }
+      .studio-head-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .studio .text-btn {
+        flex: none;
+        border: 1px solid #43454d;
+        background: #2f3037;
+        color: #e8e9ec;
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 11.5px;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .studio .text-btn:hover {
+        border-color: #6b7280;
+      }
+      .studio textarea {
+        width: 100%;
+        min-height: 220px;
+        max-height: 360px;
+        resize: vertical;
+        margin: 0;
+        background: #17181c;
+        color: #d7dae0;
+        border: 1px solid #34353b;
+        border-radius: 12px;
+        padding: 12px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 10.5px;
+        line-height: 1.5;
+        outline: none;
+      }
+      .studio textarea:focus {
+        border-color: #4d4f57;
+      }
+      #studio-config.drag textarea {
+        border-color: #7dd3fc;
+      }
+      #config-status {
+        min-height: 16px;
+      }
+      #config-status.ok {
+        color: #86efac;
+      }
+      #config-status.bad {
+        color: #fca5a5;
+      }
+      .studio code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 11px;
+        color: #d7dae0;
+      }
 
       @media (max-width: 760px) {
         .panel {
@@ -520,8 +576,9 @@
         <p>
           Pick a departure and a destination — your route draws itself across a real, spherical dot
           globe, with the return path separated for round trips. Then hit
-          <strong>🎛</strong> to open the customization studio: colours, the plane icon, the city
-          ripple, the dashes, each leg's curve angle and the 3D camera, all live.
+          <strong>🎛</strong> to open the customization studio: colours, the plane, the route and the
+          camera, all live. Export config writes a JSON file your project loads with
+          RouteDots.fromConfig().
         </p>
       </div>
 
@@ -589,14 +646,18 @@
 
       <aside class="studio" id="studio" aria-label="Customization studio" hidden>
         <div class="studio-head">
-          <strong>Customization studio</strong>
+          <div class="studio-head-row">
+            <strong>Customization studio</strong>
+            <button type="button" class="text-btn" id="config-jump">Export config</button>
+          </div>
           <span class="studio-sub">
-            Every knob below calls the public API — <code>setColors()</code>,
-            <code>setOptions()</code>, <code>setWorld()</code> — so anything this page can do, your
-            app can do.
+            Every knob calls the public API — <code>setColors()</code>, <code>setOptions()</code>,
+            <code>setWorld()</code>. Export config is the whole scene as JSON: edit it here, or drop
+            the file into a project and pass it to <code>RouteDots.fromConfig()</code>.
           </span>
         </div>
         <div id="studio-world"></div>
+        <div id="studio-scene"></div>
         <div id="studio-colors"></div>
         <div id="studio-plane"></div>
         <div id="studio-cities"></div>
@@ -604,6 +665,32 @@
         <div id="studio-airports"></div>
         <div id="studio-dashes"></div>
         <div id="studio-angles"></div>
+        <section class="grp" id="studio-config" aria-label="Export config">
+          <h4>Export config</h4>
+          <p class="note">
+            This JSON is the whole scene — theme, route, colours, plane, labels, borders, camera.
+            Edit any option and Apply to preview it, or Download
+            <code>routedots.config.json</code> and load it in your project with
+            <code>RouteDots.fromConfig(el, config)</code>. Custom draw functions and land masks are
+            not portable. You can also drop a JSON file onto this box.
+          </p>
+          <textarea
+            id="config-json"
+            spellcheck="false"
+            aria-label="RouteDots config JSON"
+          ></textarea>
+          <p class="note" id="config-status" role="status"></p>
+          <div class="studio-actions">
+            <button type="button" id="config-apply">Apply JSON</button>
+            <button type="button" id="config-copy">Copy</button>
+          </div>
+          <div class="studio-actions">
+            <button type="button" id="config-download">Download</button>
+            <button type="button" id="config-import">Import</button>
+            <button type="button" id="config-revert" hidden>Revert</button>
+          </div>
+          <input id="config-file" type="file" accept="application/json,.json" hidden />
+        </section>
         <pre class="studio-code" id="studio-code"></pre>
         <div class="studio-actions">
           <button type="button" id="studio-reset">Reset to defaults</button>
@@ -643,8 +730,9 @@
         <h3>🎛 Yours to style</h3>
         <p>
           One palette for every colour, plus the plane icon, the city ripple, the dash pattern and
-          each leg's curve angle — set them up front or restyle a live scene with
-          <code>setOptions()</code>.
+          each leg's curve angle — set them up front, restyle a live scene with
+          <code>setOptions()</code>, or export a JSON config from the studio and load it with
+          <code>fromConfig()</code>.
         </p>
       </div>
       <div class="feature">
@@ -693,6 +781,17 @@
     camera3d: { enabled: true, tilt: 40, yaw: -12, depth: 90, interactive: true },
   });
 &lt;/script&gt;</pre>
+      <p>
+        Or design the scene in the studio above and drop the exported
+        <code>routedots.config.json</code> into your project — the file is the whole library config:
+      </p>
+      <pre>
+import config from './routedots.config.json';
+import { RouteDots } from 'routedots';
+
+const rd = RouteDots.fromConfig(document.getElementById('hero-globe'), config);
+// later, after the user picks another exported file:
+rd.applyConfig(nextConfig);</pre>
     </section>
 
     <footer>
@@ -805,6 +904,7 @@
         const apply = () => {
           const ok = rd.setRoute(fromSel.value, toSel.value, { roundTrip: trip === 'round' });
           if (ok) showSuccess();
+          if (typeof refreshConfigPreview === 'function') refreshConfigPreview();
         };
 
         fromSel.addEventListener('change', apply);
@@ -824,6 +924,7 @@
           const label = `Switch to ${theme === 'light' ? 'dark' : 'light'} theme`;
           themeBtn.title = label;
           themeBtn.setAttribute('aria-label', label);
+          refreshConfigPreview();
         });
 
         oneWay.addEventListener('click', () => {
@@ -855,18 +956,35 @@
 
         // The library defaults, so "Reset" can put every knob back.
         const STUDIO_DEFAULTS = {
+          scene: {
+            surface: 'countries',
+            autoRotate: true,
+            speed: 0.4,
+            interactive: false,
+            frameRoute: true,
+            view: { lat: 40, lng: 25, altitude: 1.9 },
+          },
           route: {
-            outbound: { angle: 0, dash: { length: 0.039, gap: 0.032, speed: 4.9, width: 1.8 } },
-            return: { angle: 0, dash: { length: 0.025, gap: 0.031, speed: 3.96, width: 1.4 } },
+            outbound: {
+              angle: 0,
+              lift: 0.1,
+              dash: { length: 0.039, gap: 0.032, speed: 4.9, width: 1.8 },
+            },
+            return: {
+              angle: 0,
+              lift: 0.2,
+              dash: { length: 0.025, gap: 0.031, speed: 3.96, width: 1.4 },
+            },
           },
           cities: {
+            enabled: true,
             periodMs: 2600,
             dot: { size: 0.006, dim: 0.45 },
             ripple: { size: 0.011, width: 0.0025, grow: 2.6, opacity: 0.55 },
           },
-          labels: { fontSize: 12, fontWeight: 600, letterSpacing: 1, pill: true },
+          labels: { fontSize: 12, fontWeight: 600, letterSpacing: 1, pill: true, fontFamily: '' },
           airports: { size: 8, ring: true, sourceColor: '', destinationColor: '' },
-          plane: { icon: 'airliner', size: 30 },
+          plane: { icon: 'airliner', size: 30, enabled: true, flightMs: 4800, pauseMs: 800 },
           camera3d: {
             enabled: false,
             perspective: 1400,
@@ -1017,14 +1135,20 @@
             route: {
               outbound: {
                 angle: studio.route.outbound.angle,
+                lift: studio.route.outbound.lift,
                 dash: { ...studio.route.outbound.dash },
               },
-              return: { angle: studio.route.return.angle, dash: { ...studio.route.return.dash } },
+              return: {
+                angle: studio.route.return.angle,
+                lift: studio.route.return.lift,
+                dash: { ...studio.route.return.dash },
+              },
             },
           });
         const applyCities = () =>
           rd.setOptions({
             cities: {
+              enabled: studio.cities.enabled,
               periodMs: studio.cities.periodMs,
               dot: { ...studio.cities.dot },
               ripple: { ...studio.cities.ripple },
@@ -1040,7 +1164,15 @@
         const planeSizeForWorld = () =>
           rd.mode === 'webgl' ? round(studio.plane.size / PLANE_PX_PER_UNIT, 4) : studio.plane.size;
         const applyPlane = () =>
-          rd.setOptions({ plane: { icon: planeIcon(), size: planeSizeForWorld() } });
+          rd.setOptions({
+            plane: {
+              enabled: studio.plane.enabled,
+              icon: planeIcon(),
+              size: planeSizeForWorld(),
+              flightMs: studio.plane.flightMs,
+              pauseMs: studio.plane.pauseMs,
+            },
+          });
         const applyCamera = () => rd.setOptions({ camera3d: { ...studio.camera3d } });
         const applyLabels = () => rd.setOptions({ labels: labelsSnippet() });
         // Endpoint dots read px like the flat map; the globe gets globe radii.
@@ -1056,12 +1188,23 @@
           source: { color: airportColor(studio.airports.sourceColor) },
           destination: { color: airportColor(studio.airports.destinationColor) },
         });
-        const labelsSnippet = () => ({
-          fontSize: studio.labels.fontSize,
-          fontWeight: studio.labels.fontWeight,
-          letterSpacing: `${(studio.labels.letterSpacing / 100).toFixed(2)}em`,
-          background: studio.labels.pill ? true : false,
-        });
+        // Imported label styles the sliders don't model (a custom badge colour, a
+        // px letter-spacing) survive until the matching control is touched.
+        let labelSpacingRaw = null;
+        let labelBackgroundOverride = null;
+        const labelsSnippet = () => {
+          const snippet = {
+            fontSize: studio.labels.fontSize,
+            fontWeight: studio.labels.fontWeight,
+            letterSpacing: labelSpacingRaw ?? `${(studio.labels.letterSpacing / 100).toFixed(2)}em`,
+            background:
+              labelBackgroundOverride !== null
+                ? labelBackgroundOverride
+                : Boolean(studio.labels.pill),
+          };
+          if (studio.labels.fontFamily.trim()) snippet.fontFamily = studio.labels.fontFamily.trim();
+          return snippet;
+        };
         const applyAirports = () => rd.setOptions({ airports: airportsSnippet() });
 
         // ── World + 3D camera ───────────────────────────────────────────────
@@ -1168,6 +1311,117 @@
         });
         note(worldBox, 'Drag the flat map to orbit the camera; scroll to zoom.');
 
+        // ── Scene (the options the constructor usually hard-codes) ──────────
+        const sceneBox = section('studio-scene', 'Scene');
+        const surfaceSelect = selection(sceneBox, {
+          id: 'surface',
+          label: 'Surface',
+          options: [
+            ['countries', 'Countries'],
+            ['dots', 'Dot lattice'],
+          ],
+          value: 'countries',
+          onChange: (value) => {
+            studio.scene.surface = value;
+            rd.setOptions({ surface: value });
+            showSnippet();
+          },
+        });
+        const autoRotateToggle = checkbox(sceneBox, {
+          id: 'auto-rotate',
+          label: 'Idle rotation',
+          checked: true,
+          onChange: (on) => {
+            studio.scene.autoRotate = on;
+            schedule(applyMotion);
+          },
+        });
+        const autoSpeed = slider(sceneBox, {
+          id: 'auto-speed',
+          label: 'Rotate speed',
+          min: 0,
+          max: 3,
+          step: 0.05,
+          value: STUDIO_DEFAULTS.scene.speed,
+          format: (v) => `${v.toFixed(2)}°/s`,
+          onInput: (v) => {
+            studio.scene.speed = v;
+            schedule(applyMotion);
+          },
+        });
+        const interactiveToggle = checkbox(sceneBox, {
+          id: 'globe-interactive',
+          label: 'Drag + zoom the globe',
+          checked: false,
+          onChange: (on) => {
+            studio.scene.interactive = on;
+            schedule(applyMotion);
+          },
+        });
+        const frameToggle = checkbox(sceneBox, {
+          id: 'frame-route',
+          label: 'Frame each new route',
+          checked: true,
+          onChange: (on) => {
+            studio.scene.frameRoute = on;
+            schedule(applyMotion);
+          },
+        });
+        const applyMotion = () =>
+          rd.setOptions({
+            autoRotate: { enabled: studio.scene.autoRotate, speed: studio.scene.speed },
+            interactive: studio.scene.interactive,
+            frameRoute: studio.scene.frameRoute,
+          });
+        const applyView = () => {
+          const view = { ...studio.scene.view };
+          rd.setOptions({ view });
+          if (rd.mode === 'webgl') rd.setView(view, 500);
+        };
+        const viewLat = slider(sceneBox, {
+          id: 'view-lat',
+          label: 'Camera lat',
+          min: -80,
+          max: 80,
+          step: 1,
+          value: STUDIO_DEFAULTS.scene.view.lat,
+          format: (v) => `${v}°`,
+          onInput: (v) => {
+            studio.scene.view.lat = v;
+            schedule(applyView);
+          },
+        });
+        const viewLng = slider(sceneBox, {
+          id: 'view-lng',
+          label: 'Camera lng',
+          min: -180,
+          max: 180,
+          step: 1,
+          value: STUDIO_DEFAULTS.scene.view.lng,
+          format: (v) => `${v}°`,
+          onInput: (v) => {
+            studio.scene.view.lng = v;
+            schedule(applyView);
+          },
+        });
+        const viewAlt = slider(sceneBox, {
+          id: 'view-alt',
+          label: 'Altitude',
+          min: 1.1,
+          max: 3.5,
+          step: 0.05,
+          value: STUDIO_DEFAULTS.scene.view.altitude,
+          format: (v) => `${v.toFixed(2)}×`,
+          onInput: (v) => {
+            studio.scene.view.altitude = v;
+            schedule(applyView);
+          },
+        });
+        note(
+          sceneBox,
+          'Surface, idle spin, globe drag and the opening camera. Borders, texture and fallback live in the JSON below — Apply remounts the scene with them.',
+        );
+
         // ── Colours ─────────────────────────────────────────────────────────
         const colorsBox = section('studio-colors', 'Colours');
         const COLOR_KEYS = [
@@ -1253,10 +1507,54 @@
             schedule(applyPlane);
           },
         });
+        const planeEnabled = checkbox(planeBox, {
+          id: 'plane-enabled',
+          label: 'Show the plane',
+          checked: true,
+          onChange: (on) => {
+            studio.plane.enabled = on;
+            schedule(applyPlane);
+          },
+        });
+        const planeFlight = slider(planeBox, {
+          id: 'plane-flight',
+          label: 'Flight',
+          min: 800,
+          max: 12000,
+          step: 100,
+          value: STUDIO_DEFAULTS.plane.flightMs,
+          format: (v) => `${v}ms`,
+          onInput: (v) => {
+            studio.plane.flightMs = v;
+            schedule(applyPlane);
+          },
+        });
+        const planePause = slider(planeBox, {
+          id: 'plane-pause',
+          label: 'Pause',
+          min: 0,
+          max: 5000,
+          step: 50,
+          value: STUDIO_DEFAULTS.plane.pauseMs,
+          format: (v) => `${v}ms`,
+          onInput: (v) => {
+            studio.plane.pauseMs = v;
+            schedule(applyPlane);
+          },
+        });
         note(planeBox, 'Any SVG `path` data, or one of the four built-in presets.');
 
         // ── City ripple ─────────────────────────────────────────────────────
         const cityBox = section('studio-cities', 'City ripple');
+        const cityEnabled = checkbox(cityBox, {
+          id: 'city-enabled',
+          label: 'Show city markers',
+          checked: true,
+          onChange: (on) => {
+            studio.cities.enabled = on;
+            schedule(applyCities);
+          },
+        });
         const cityPeriod = slider(cityBox, {
           id: 'city-period',
           label: 'Period',
@@ -1390,6 +1688,7 @@
           format: (v) => `${(v / 100).toFixed(2)}em`,
           onInput: (v) => {
             studio.labels.letterSpacing = v;
+            labelSpacingRaw = null;
             schedule(applyLabels);
           },
         });
@@ -1399,6 +1698,17 @@
           checked: true,
           onChange: (on) => {
             studio.labels.pill = on;
+            labelBackgroundOverride = null;
+            schedule(applyLabels);
+          },
+        });
+        const labelFamily = textField(labelsBox, {
+          id: 'label-family',
+          label: 'Font family',
+          placeholder: 'system-ui, sans-serif',
+          value: '',
+          onInput: (value) => {
+            studio.labels.fontFamily = value;
             schedule(applyLabels);
           },
         });
@@ -1553,6 +1863,32 @@
             schedule(applyRoute);
           },
         });
+        const liftOut = slider(angleBox, {
+          id: 'lift-outbound',
+          label: 'Outbound lift',
+          min: 0,
+          max: 0.6,
+          step: 0.01,
+          value: STUDIO_DEFAULTS.route.outbound.lift,
+          format: (v) => v.toFixed(2),
+          onInput: (v) => {
+            studio.route.outbound.lift = v;
+            schedule(applyRoute);
+          },
+        });
+        const liftBack = slider(angleBox, {
+          id: 'lift-return',
+          label: 'Return lift',
+          min: 0,
+          max: 0.6,
+          step: 0.01,
+          value: STUDIO_DEFAULTS.route.return.lift,
+          format: (v) => v.toFixed(2),
+          onInput: (v) => {
+            studio.route.return.lift = v;
+            schedule(applyRoute);
+          },
+        });
         note(
           angleBox,
           'Banks each leg out of its great-circle plane, up to ±85°. Both endpoints stay put, ' +
@@ -1566,6 +1902,7 @@
             route: {
               outbound: {
                 angle: studio.route.outbound.angle,
+                lift: round(studio.route.outbound.lift, 2),
                 dash: {
                   length: round(studio.route.outbound.dash.length, 3),
                   gap: round(studio.route.outbound.dash.gap, 3),
@@ -1575,6 +1912,7 @@
               },
               return: {
                 angle: studio.route.return.angle,
+                lift: round(studio.route.return.lift, 2),
                 dash: {
                   length: round(studio.route.return.dash.length, 3),
                   gap: round(studio.route.return.dash.gap, 3),
@@ -1614,10 +1952,22 @@
           }
           lines.push(`rd.setOptions(${JSON.stringify(snippet, null, 2)});`);
           if (worldMode !== 'auto') lines.push(`rd.setWorld('${worldMode}');`);
+          if (studio.scene.surface !== 'countries') {
+            lines.push(`rd.setOptions({ surface: '${studio.scene.surface}' });`);
+          }
           codeEl.textContent = lines.join('\n');
+          refreshConfigPreview();
         };
 
         const paintAll = () => {
+          surfaceSelect.value = studio.scene.surface;
+          autoRotateToggle.paint(studio.scene.autoRotate);
+          autoSpeed.paint(studio.scene.speed);
+          interactiveToggle.paint(studio.scene.interactive);
+          frameToggle.paint(studio.scene.frameRoute);
+          viewLat.paint(studio.scene.view.lat);
+          viewLng.paint(studio.scene.view.lng);
+          viewAlt.paint(studio.scene.view.altitude);
           camToggle.paint(studio.camera3d.enabled);
           camPerspective.paint(studio.camera3d.perspective);
           camTilt.paint(studio.camera3d.tilt);
@@ -1625,8 +1975,13 @@
           camDepth.paint(studio.camera3d.depth);
           camInteractive.paint(studio.camera3d.interactive);
           planeIconSelect.value = studio.plane.icon;
+          pathField.input.value = customIconPath;
           pathField.input.disabled = studio.plane.icon !== 'custom';
           planeSize.paint(studio.plane.size);
+          planeEnabled.paint(studio.plane.enabled);
+          planeFlight.paint(studio.plane.flightMs);
+          planePause.paint(studio.plane.pauseMs);
+          cityEnabled.paint(studio.cities.enabled);
           cityPeriod.paint(studio.cities.periodMs);
           cityDot.paint(studio.cities.dot.size);
           cityDim.paint(studio.cities.dot.dim);
@@ -1638,12 +1993,321 @@
           labelWeight.value = String(studio.labels.fontWeight);
           labelSpacing.paint(studio.labels.letterSpacing);
           labelPill.paint(studio.labels.pill);
+          labelFamily.input.value = studio.labels.fontFamily;
           airportSize.paint(studio.airports.size);
           airportRing.paint(studio.airports.ring);
           angleOut.paint(studio.route.outbound.angle);
           angleBack.paint(studio.route.return.angle);
+          liftOut.paint(studio.route.outbound.lift);
+          liftBack.paint(studio.route.return.lift);
           loadDash();
         };
+        // ── portable config: the JSON the host project imports ──────────────
+        const configJson = document.getElementById('config-json');
+        const configStatus = document.getElementById('config-status');
+        const configSection = document.getElementById('studio-config');
+        const revertBtn = document.getElementById('config-revert');
+        const configFile = document.getElementById('config-file');
+        let configName = 'RouteDots showcase';
+        let configDirty = false;
+
+        function setStatus(message, kind) {
+          configStatus.textContent = message;
+          configStatus.classList.toggle('ok', kind === 'ok');
+          configStatus.classList.toggle('bad', kind === 'bad');
+        }
+        function refreshConfigPreview(force) {
+          if (configDirty && !force) return;
+          if (typeof rd.toConfigJSON !== 'function') return;
+          configJson.value = rd.toConfigJSON({ name: configName });
+          configDirty = false;
+          revertBtn.hidden = true;
+        }
+        function hexOrNull(value) {
+          if (typeof value !== 'string') return null;
+          const hex = value.trim();
+          if (/^#[0-9a-fA-F]{6}$/.test(hex)) return hex.toLowerCase();
+          if (/^#[0-9a-fA-F]{3}$/.test(hex)) {
+            return `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`.toLowerCase();
+          }
+          return null;
+        }
+        function endpointCode(endpoint) {
+          if (typeof endpoint === 'string') return endpoint.toUpperCase();
+          if (endpoint && typeof endpoint.code === 'string' && endpoint.code.trim()) {
+            return endpoint.code.trim().toUpperCase();
+          }
+          return null;
+        }
+        function selectHas(sel, code) {
+          return Boolean(code && sel.querySelector(`option[value="${CSS.escape(code)}"]`));
+        }
+        function overlayConfig(options) {
+          if (!options) return;
+          if (options.theme === 'light' || options.theme === 'dark') {
+            theme = options.theme;
+            themeBtn.textContent = theme === 'light' ? '🌙' : '☀️';
+            const label = `Switch to ${theme === 'light' ? 'dark' : 'light'} theme`;
+            themeBtn.title = label;
+            themeBtn.setAttribute('aria-label', label);
+          }
+          if (options.world) {
+            worldMode = options.world;
+            worldSelect.value = options.world;
+          }
+          if (options.surface) studio.scene.surface = options.surface;
+          if (options.autoRotate) {
+            if (typeof options.autoRotate.enabled === 'boolean') {
+              studio.scene.autoRotate = options.autoRotate.enabled;
+            }
+            if (typeof options.autoRotate.speed === 'number')
+              studio.scene.speed = options.autoRotate.speed;
+          }
+          if (typeof options.interactive === 'boolean')
+            studio.scene.interactive = options.interactive;
+          if (typeof options.frameRoute === 'boolean') studio.scene.frameRoute = options.frameRoute;
+          if (options.view) {
+            if (typeof options.view.lat === 'number') studio.scene.view.lat = options.view.lat;
+            if (typeof options.view.lng === 'number') studio.scene.view.lng = options.view.lng;
+            if (typeof options.view.altitude === 'number') {
+              studio.scene.view.altitude = options.view.altitude;
+            }
+          }
+          if (options.colors) {
+            for (const [key, value] of Object.entries(options.colors)) {
+              if (typeof value !== 'string' || !colorInputs[key]) continue;
+              paletteOverrides[key] = value;
+              const hex = hexOrNull(value);
+              if (hex) colorInputs[key].value = hex;
+            }
+          }
+          const takeLeg = (leg, style) => {
+            if (!style) return;
+            if (typeof style.angle === 'number') studio.route[leg].angle = style.angle;
+            if (typeof style.lift === 'number') studio.route[leg].lift = style.lift;
+            if (style.dash && typeof style.dash === 'object') {
+              for (const key of ['length', 'gap', 'speed', 'width']) {
+                if (typeof style.dash[key] === 'number')
+                  studio.route[leg].dash[key] = style.dash[key];
+              }
+            }
+          };
+          if (options.route) {
+            takeLeg('outbound', options.route.outbound);
+            takeLeg('return', options.route.return);
+          }
+          if (options.cities) {
+            if (typeof options.cities.enabled === 'boolean')
+              studio.cities.enabled = options.cities.enabled;
+            if (typeof options.cities.periodMs === 'number') {
+              studio.cities.periodMs = options.cities.periodMs;
+            }
+            if (options.cities.dot) {
+              if (typeof options.cities.dot.size === 'number')
+                studio.cities.dot.size = options.cities.dot.size;
+              if (typeof options.cities.dot.dim === 'number')
+                studio.cities.dot.dim = options.cities.dot.dim;
+            }
+            if (options.cities.ripple) {
+              for (const key of ['size', 'width', 'grow', 'opacity']) {
+                if (typeof options.cities.ripple[key] === 'number') {
+                  studio.cities.ripple[key] = options.cities.ripple[key];
+                }
+              }
+            }
+          }
+          if (options.labels) {
+            if (typeof options.labels.fontSize === 'number')
+              studio.labels.fontSize = options.labels.fontSize;
+            if (options.labels.fontWeight != null && Number(options.labels.fontWeight)) {
+              studio.labels.fontWeight = Number(options.labels.fontWeight);
+            }
+            if (typeof options.labels.fontFamily === 'string') {
+              studio.labels.fontFamily = options.labels.fontFamily;
+            }
+            if (options.labels.background === false) {
+              studio.labels.pill = false;
+              labelBackgroundOverride = null;
+            } else if (typeof options.labels.background === 'string') {
+              studio.labels.pill = true;
+              labelBackgroundOverride = options.labels.background;
+            } else if (options.labels.background === true) {
+              studio.labels.pill = true;
+              labelBackgroundOverride = null;
+            }
+            const spacing =
+              typeof options.labels.letterSpacing === 'string'
+                ? /^(-?[\d.]+)em$/.exec(options.labels.letterSpacing.trim())
+                : null;
+            if (spacing) studio.labels.letterSpacing = Math.round(Number(spacing[1]) * 100);
+            else if (typeof options.labels.letterSpacing === 'string') {
+              labelSpacingRaw = options.labels.letterSpacing;
+            }
+          }
+          if (options.airports) {
+            if (typeof options.airports.size === 'number') {
+              studio.airports.size =
+                options.airports.size < 1
+                  ? Math.round(options.airports.size * AIRPORT_PX_PER_UNIT)
+                  : options.airports.size;
+            }
+            if (typeof options.airports.ring === 'boolean')
+              studio.airports.ring = options.airports.ring;
+            const source = options.airports.source?.color || '';
+            const dest = options.airports.destination?.color || '';
+            studio.airports.sourceColor = source;
+            studio.airports.destinationColor = dest;
+            const sourceHex = hexOrNull(source);
+            const destHex = hexOrNull(dest);
+            if (sourceHex) document.getElementById('airport-source-color').value = sourceHex;
+            if (destHex) document.getElementById('airport-destination-color').value = destHex;
+          }
+          if (options.plane) {
+            if (typeof options.plane.enabled === 'boolean')
+              studio.plane.enabled = options.plane.enabled;
+            if (typeof options.plane.flightMs === 'number')
+              studio.plane.flightMs = options.plane.flightMs;
+            if (typeof options.plane.pauseMs === 'number')
+              studio.plane.pauseMs = options.plane.pauseMs;
+            if (typeof options.plane.size === 'number') {
+              studio.plane.size =
+                options.plane.size < 1
+                  ? Math.round(options.plane.size * PLANE_PX_PER_UNIT)
+                  : options.plane.size;
+            }
+            const icon = options.plane.icon;
+            if (typeof icon === 'string') {
+              studio.plane.icon = icon;
+              customIconPath = '';
+            } else if (icon && typeof icon.path === 'string') {
+              studio.plane.icon = 'custom';
+              customIconPath = icon.path;
+            }
+          }
+          if (options.camera3d) {
+            const cam = options.camera3d;
+            if (typeof cam.enabled === 'boolean') studio.camera3d.enabled = cam.enabled;
+            if (typeof cam.perspective === 'number') studio.camera3d.perspective = cam.perspective;
+            if (typeof cam.tilt === 'number') studio.camera3d.tilt = cam.tilt;
+            if (typeof cam.yaw === 'number') studio.camera3d.yaw = cam.yaw;
+            if (typeof cam.depth === 'number') studio.camera3d.depth = cam.depth;
+            if (typeof cam.interactive === 'boolean') studio.camera3d.interactive = cam.interactive;
+          }
+        }
+        function hydrateFromConfig(parsed) {
+          if (parsed.kind === 'document') {
+            studio = JSON.parse(JSON.stringify(STUDIO_DEFAULTS));
+            customIconPath = '';
+            labelSpacingRaw = null;
+            labelBackgroundOverride = null;
+            dashLeg = 'both';
+            worldMode = 'auto';
+            worldSelect.value = 'auto';
+            for (const key of Object.keys(paletteOverrides)) delete paletteOverrides[key];
+            document.getElementById('dash-leg').value = 'both';
+            document.getElementById('airport-source-color').value = '#000000';
+            document.getElementById('airport-destination-color').value = '#000000';
+            configName = parsed.name || 'RouteDots showcase';
+          }
+          overlayConfig(parsed.options);
+          paintAll();
+          syncColors();
+          if (!parsed.route) return;
+          const from = endpointCode(parsed.route.from);
+          const to = endpointCode(parsed.route.to);
+          if (selectHas(fromSel, from)) fromSel.value = from;
+          if (selectHas(toSel, to)) toSel.value = to;
+          const round = parsed.route.roundTrip !== false;
+          trip = round ? 'round' : 'one';
+          oneWay.classList.toggle('active', !round);
+          roundTrip.classList.toggle('active', round);
+          if (rd.getRoute()) showSuccess();
+        }
+        function applyConfigText(text) {
+          try {
+            const parsed = rd.applyConfig(text);
+            configDirty = false;
+            hydrateFromConfig(parsed);
+            refreshConfigPreview(true);
+            const notes = parsed.warnings.filter(Boolean).slice(0, 2).join(' ');
+            setStatus(notes ? `Applied config. ${notes}` : 'Applied config', 'ok');
+          } catch (err) {
+            setStatus(err && err.message ? err.message : 'Could not apply that config', 'bad');
+          }
+        }
+        function readConfigFile(file) {
+          const reader = new FileReader();
+          reader.onload = () => applyConfigText(String(reader.result || ''));
+          reader.onerror = () => setStatus('Could not read that file', 'bad');
+          reader.readAsText(file);
+        }
+        function downloadConfig() {
+          const text = configJson.value.endsWith('\n') ? configJson.value : `${configJson.value}\n`;
+          const blob = new Blob([text], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'routedots.config.json';
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(url);
+          setStatus('Downloaded routedots.config.json', 'ok');
+        }
+        async function copyConfig() {
+          const text = configJson.value;
+          try {
+            await navigator.clipboard.writeText(text);
+            setStatus('Copied config JSON', 'ok');
+          } catch {
+            configJson.focus();
+            configJson.select();
+            setStatus('JSON selected — press Ctrl/Cmd+C to copy', 'ok');
+          }
+        }
+
+        configJson.addEventListener('input', () => {
+          configDirty = true;
+          revertBtn.hidden = false;
+          setStatus('Unapplied edits — Apply JSON to preview them');
+        });
+        document.getElementById('config-apply').addEventListener('click', () => {
+          applyConfigText(configJson.value);
+        });
+        document.getElementById('config-copy').addEventListener('click', () => {
+          copyConfig();
+        });
+        document.getElementById('config-download').addEventListener('click', downloadConfig);
+        document
+          .getElementById('config-import')
+          .addEventListener('click', () => configFile.click());
+        configFile.addEventListener('change', () => {
+          const file = configFile.files && configFile.files[0];
+          configFile.value = '';
+          if (file) readConfigFile(file);
+        });
+        revertBtn.addEventListener('click', () => {
+          configDirty = false;
+          refreshConfigPreview(true);
+          setStatus('Reverted to the live scene', 'ok');
+        });
+        document.getElementById('config-jump').addEventListener('click', () => {
+          if (studioEl.hidden) studioToggle.click();
+          configSection.scrollIntoView({ block: 'start' });
+        });
+        configSection.addEventListener('dragover', (event) => {
+          event.preventDefault();
+          configSection.classList.add('drag');
+        });
+        configSection.addEventListener('dragleave', () => configSection.classList.remove('drag'));
+        configSection.addEventListener('drop', (event) => {
+          event.preventDefault();
+          configSection.classList.remove('drag');
+          const file =
+            event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+          if (file) readConfigFile(file);
+        });
+
         paintAll();
         showSnippet();
 
@@ -1652,31 +2316,26 @@
           dashLeg = 'both';
           worldMode = 'auto';
           customIconPath = '';
+          labelSpacingRaw = null;
+          labelBackgroundOverride = null;
+          configName = 'RouteDots showcase';
+          configDirty = false;
           for (const key of Object.keys(paletteOverrides)) delete paletteOverrides[key];
           document.getElementById('dash-leg').value = 'both';
           document.getElementById('airport-source-color').value = '#000000';
           document.getElementById('airport-destination-color').value = '#000000';
           worldSelect.value = 'auto';
           paintAll();
-          rd.resetColors();
           syncColors();
-          rd.setOptions({
-            route: {
-              outbound: { angle: 0, dash: { ...studio.route.outbound.dash } },
-              return: { angle: 0, dash: { ...studio.route.return.dash } },
-            },
-            cities: {
-              periodMs: studio.cities.periodMs,
-              dot: { ...studio.cities.dot },
-              ripple: { ...studio.cities.ripple },
-            },
-            labels: labelsSnippet(),
-            airports: airportsSnippet(),
-            plane: { icon: studio.plane.icon, size: planeSizeForWorld() },
-            camera3d: { ...studio.camera3d },
+          // Replace, don't merge — an imported border or colour must not linger.
+          rd.replaceOptions({
+            theme,
+            view: { lat: 40, lng: 25, altitude: 1.9 },
+            autoRotate: { enabled: true, speed: 0.4 },
+            plane: { flightMs: 4800, pauseMs: 800 },
           });
-          rd.setWorld('auto');
           showSnippet();
+          setStatus('Reset to defaults', 'ok');
         });
 
         studioToggle.addEventListener('click', () => {

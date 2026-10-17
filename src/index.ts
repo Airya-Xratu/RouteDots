@@ -68,6 +68,23 @@ export * from './flat/borderPolylines.js';
 export * from './flat/countryPaths.js';
 export * from './flat/FlatRouteMap.js';
 
+// Portable JSON config (showcase export → host project)
+export {
+  ROUTEDOTS_CONFIG_VERSION,
+  RouteDotsConfigError,
+  createRouteDotsConfig,
+  parseRouteDotsConfig,
+  sanitizeRouteDotsOptions,
+  stringifyRouteDotsConfig,
+} from './config.js';
+export type {
+  ParsedRouteDotsConfig,
+  RouteDotsConfig,
+  RouteDotsConfigEndpoint,
+  RouteDotsConfigKind,
+  RouteDotsConfigRoute,
+} from './config.js';
+
 // Public API
 export * from './cities.js';
 export * from './RouteDots.js';

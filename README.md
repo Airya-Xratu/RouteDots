@@ -45,6 +45,8 @@ and a flat 2D fallback for browsers without WebGL.
   and destination airports** can be styled independently (`airports`: dot
   colour / size, pulse ring, per endpoint). Call `rd.setOptions()` /
   `rd.setColors()` to restyle a live scene without restarting the animation.
+  The showcase studio exports that whole scene as JSON —
+  `RouteDots.fromConfig(el, config)` loads it in your project.
 - 🌐 **3D globe or flat map — your call.** `world: 'auto' | 'globe' | 'flat'`
   picks the renderer, and the flat map can itself be a 3D scene
   (`camera3d`): CSS perspective, drag-to-orbit, wheel zoom and depth layers
@@ -88,8 +90,52 @@ case-insensitive), `City` objects, or bare `{ lat, lng }` points.
 **Try it:** `npm run build && npm run dev`, then open
 [`http://localhost:5173`](http://localhost:5173) — a full airline hero where
 the search form (source/destination, swap, date, one-way/round trip,
-light/dark theme) drives the globe live. The same page also works from any
-static server once built: [`examples/showcase/index.html`](./examples/showcase/index.html).
+light/dark theme) drives the globe live. Open **🎛** to style it, then export
+that look as JSON (next section). The same page also works from any static
+server once built: [`examples/showcase/index.html`](./examples/showcase/index.html).
+
+## Use a showcase config
+
+Design the scene in the showcase, download one JSON file, and pass that file
+to RouteDots in the app that depends on the library. You do not copy slider
+values into `setOptions` by hand.
+
+1. Start the showcase (`npm run dev`) and open
+   [http://localhost:5173](http://localhost:5173).
+2. Open the customization studio with **🎛**, or with **Export config** in the
+   studio header.
+3. Pick a route in the search panel, then tune the knobs (world, colours,
+   plane, dashes, curve, labels, airports, camera). Options that have no knob
+   — borders, texture, label colours, draw timing — go in the JSON box.
+   **Apply JSON** previews those edits on the globe.
+4. **Download** saves `routedots.config.json`. **Copy** puts the same text on
+   the clipboard. The box _is_ the file: Download and Copy use whatever is in
+   it, including edits you have not applied yet. **Revert** throws those edits
+   away. **Import** (or a drop onto the box) loads a file back into the studio.
+5. Put that file in your project — next to the component that mounts the
+   globe, or in `public/` if you will `fetch` it.
+6. Mount from the file. This applies every option in it and draws the route
+   the studio was showing:
+
+```ts
+import config from './routedots.config.json';
+import { RouteDots } from 'routedots';
+
+const rd = RouteDots.fromConfig(document.getElementById('hero-globe')!, config);
+
+// The file styled the scene. Your form can still change the flight:
+searchButton.addEventListener('click', () => {
+  rd.setRoute(fromSelect.value, toSelect.value, { roundTrip: true });
+});
+```
+
+TypeScript needs `"resolveJsonModule": true` to `import` a `.json` file. To
+load it at runtime instead, `fetch('/routedots.config.json')` and pass the
+object to `RouteDots.fromConfig`. A later export replaces the live scene with
+`rd.applyConfig(nextConfig)`.
+
+File shape, warnings, React, and the no-bundler `fetch` snippet:
+[developer guide](./docs/developer-guide.md#portable-config).
 
 ## API in 30 seconds
 
@@ -101,6 +147,7 @@ static server once built: [`examples/showcase/index.html`](./examples/showcase/i
 | `rd.setTheme('light' \| 'dark')`          | Live theme switch.                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `rd.setColors(colors)`                    | Restyle everything live (`rd.resetColors()` drops the overrides).                                                                                                                                                                                                                                                                                                                                                         |
 | `rd.setOptions(options)`                  | Apply any option live — dashes, angles, ripple, labels, airports, icon, camera; `rd.setWorld('flat')` switches renderer.                                                                                                                                                                                                                                                                                                  |
+| `RouteDots.fromConfig(el, config)`        | Mount from a showcase JSON config (`rd.applyConfig(config)` on a live instance; `rd.exportConfig()` writes one back).                                                                                                                                                                                                                                                                                                     |
 | `rd.getRouteStyle()` / `rd.getCamera3D()` | The resolved numbers behind what you see (handy in tests).                                                                                                                                                                                                                                                                                                                                                                |
 | `rd.on('route:drawn', cb)`                | Events: `ready`, `route:updated`, `route:drawn`, `route:invalid`, `route:cleared`, `mode:changed`.                                                                                                                                                                                                                                                                                                                        |
 | `rd.dispose()`                            | Tear down.                                                                                                                                                                                                                                                                                                                                                                                                                |

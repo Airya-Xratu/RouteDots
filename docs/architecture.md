@@ -19,6 +19,7 @@ src/
 ├── types.ts                  LatLon, City, WorldMode
 ├── cities.ts                 Default city dataset + resolveCity()
 ├── theme.ts                  One palette → GLOBE/ROUTE/FLAT theme tables
+├── config.ts                 Portable JSON config: parse, sanitize, export
 ├── RouteDots.ts              Public facade: mode selection, routing, live styling, events
 ├── core/
 │   ├── topojson.ts           Minimal TopoJSON decoder → PolygonRings
