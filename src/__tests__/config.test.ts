@@ -38,8 +38,20 @@ const scene = {
     frameRoute: false,
     texture: { stepDeg: 3, dotSizeDeg: 0.5 },
     borders: { enabled: true, color: '#ffffff', opacity: 0.4, width: 1.5 },
+    hexTiles: {
+      enabled: true,
+      spacingDeg: 2.5,
+      sizeDeg: 1.23,
+      insetDeg: 0.4,
+      color: '#7dd3fc',
+      opacity: 0.35,
+    },
     route: {
-      outbound: { angle: 22, lift: 0.18, dash: { length: 0.04, gap: 0.02, speed: 2, width: 2.4 } },
+      outbound: {
+        angle: 22,
+        lift: 0.18,
+        dash: { length: 0.062, gap: 0.05, speed: 0.039, units: 'world', width: 2.4 },
+      },
       return: { angle: -30, dash: false },
       drawDurationMs: 800,
       pulse: false,
@@ -262,5 +274,25 @@ describe('createRouteDotsConfig', () => {
     const { config } = createRouteDotsConfig({ theme: 'dark' }, null);
     expect(config.route).toBeNull();
     expect(config.name).toBeUndefined();
+  });
+});
+
+describe('portable config — newer options', () => {
+  it('keeps the dash units and the country hex tiles', () => {
+    const parsed = parseRouteDotsConfig(scene);
+    expect(parsed.warnings).toEqual([]);
+    const outbound = (parsed.options.route as { outbound: { dash: unknown } }).outbound.dash;
+    expect(outbound).toMatchObject({ units: 'world', length: 0.062, gap: 0.05 });
+    expect(parsed.options.hexTiles).toEqual(scene.options.hexTiles);
+  });
+
+  it('rejects an unknown dash unit instead of guessing', () => {
+    const parsed = parseRouteDotsConfig({
+      route: { outbound: { dash: { length: 0.06, units: 'pixels' } } },
+    });
+    expect(parsed.warnings.some((w) => w.includes('must be one of world, route'))).toBe(true);
+    const outbound = (parsed.options.route as { outbound: { dash: { units?: string } } }).outbound
+      .dash;
+    expect(outbound.units).toBeUndefined();
   });
 });

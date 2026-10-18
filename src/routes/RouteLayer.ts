@@ -282,7 +282,10 @@ export class RouteLayer {
   private buildArc(spec: RouteArcSpec, style: ResolvedPathStyle, progress = 0): ArcObject {
     const curve = new GreatCircleCurve(spec.from, spec.to, spec.lift, spec.angle);
     const geometry = new THREE.TubeGeometry(curve, 128, globeTubeRadius(style.width), 8, false);
-    const dash = style.dash ? dashUniforms(style.dash) : null;
+    // Arc length in globe radii: a world-unit dash pattern is measured
+    // against it, so a long haul and a short hop carry the same dashes.
+    const arcLength = curve.getLength();
+    const dash = style.dash ? dashUniforms(style.dash, arcLength) : null;
     const uniforms: Record<string, THREE.IUniform> = {
       uColor: { value: new THREE.Color(style.dash?.color ?? style.color) },
       uOpacity: { value: style.opacity },

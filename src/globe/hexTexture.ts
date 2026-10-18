@@ -6,7 +6,7 @@
  * hexagons, so the country-surface shell shows through between tiles.
  */
 import * as THREE from 'three';
-import type { HexPattern, HexTile } from '../core/hexPattern.js';
+import type { HexPattern } from '../core/hexPattern.js';
 
 export interface HexTextureOptions {
   /** Texture width in px (default 2048, height = width / 2). */
@@ -85,12 +85,11 @@ export function createHexTexture(
   ctx.fillStyle = color;
   ctx.globalAlpha = opacity;
 
-  // Hex circum-radius in px (sizeDeg is in degrees of longitude at the
-  // equator; latitude compression is not applied — tiles look slightly
-  // squashed near the poles, matching the dot lattice's aesthetic).
-  const radiusPx = Math.max(1, (pattern.tiles[0]?.sizeDeg ?? 1) / 360 * width * 0.85);
-
   for (const tile of pattern.tiles) {
+    // Circum-radius in px: `sizeDeg` is measured in degrees of longitude, and
+    // latitude compression is not applied — tiles look slightly squashed near
+    // the poles, matching the dot lattice's aesthetic.
+    const radiusPx = Math.max(1, (tile.sizeDeg / 360) * width);
     // Allow wrapping when a hex centre is pushed across the antimeridian by
     // the odd-row offset — draw it twice so tiles near the seam don't have a
     // gap.

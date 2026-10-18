@@ -23,7 +23,7 @@ import { buildDotGrid } from '../core/dotPattern.js';
 import { buildHexGrid } from '../core/hexPattern.js';
 import {
   decodeBorderArcs,
-  decodeCountryPolygons,
+  decodeCountryPolygonsCached,
   decodeRings,
   type TopoLand,
 } from '../core/topojson.js';
@@ -44,7 +44,12 @@ import { PlaneIcon, type PlaneIconSource } from '../routes/PlaneIcon.js';
 import { PlaneScheduler, type FlightLeg } from '../routes/PlaneScheduler.js';
 import { easeInOutCubic } from '../routes/easing.js';
 import type { ResolvedPathStyle, RouteStyleOptions } from '../routes/routeStyle.js';
-import { dashArrayPx, resolveRouteStyle, type ResolvedRouteStyle } from '../routes/routeStyle.js';
+import {
+  dashArrayPx,
+  dashFlowPerSecond,
+  resolveRouteStyle,
+  type ResolvedRouteStyle,
+} from '../routes/routeStyle.js';
 import {
   resolveCityLabelStyle,
   svgLabelAttrs,
@@ -494,7 +499,7 @@ export class FlatRouteMap {
     ctx.clearRect(0, 0, this.width, this.height);
     ctx.fillStyle = this.theme.land;
     for (const path of flatCountryPaths(
-      decodeCountryPolygons(countriesTopo),
+      decodeCountryPolygonsCached(countriesTopo),
       this.width,
       this.height,
     )) {
@@ -513,20 +518,23 @@ export class FlatRouteMap {
   private renderHexTiles(hexOpts: HexTilesOptions): void {
     const ctx = this.canvas.getContext('2d');
     if (!ctx) return;
-    const polygons = decodeCountryPolygons(countriesTopo);
-    const pattern = buildHexGrid(polygons, { spacingDeg: hexOpts.spacingDeg });
+    const polygons = decodeCountryPolygonsCached(countriesTopo);
+    const pattern = buildHexGrid(polygons, {
+      spacingDeg: hexOpts.spacingDeg,
+      sizeDeg: hexOpts.sizeDeg,
+      insetDeg: hexOpts.insetDeg,
+    });
     const fillColor = hexOpts.color ?? this.theme.border;
     const opacity = hexOpts.opacity ?? 0.35;
-    const rDeg = pattern.tiles[0]?.sizeDeg ?? 1;
-    const radiusPx = Math.max(1, (rDeg / 360) * this.width * 0.85);
 
     ctx.save();
     ctx.fillStyle = fillColor;
     ctx.globalAlpha = Math.min(1, Math.max(0, opacity));
     for (const tile of pattern.tiles) {
       const [cx, cy] = this.project(tile);
-      // Antimeridian wrap: a tile whose centre is pushed onto the seam by
-      // the row offset must be drawn on both sides of the map.
+      const radiusPx = Math.max(1, (tile.sizeDeg / 360) * this.width);
+      // Antimeridian wrap: a tile sitting on the seam is drawn on both sides
+      // of the map, so the cylinder reads as continuous.
       const draws: [number, number][] = [[cx, cy]];
       if (tile.lng > 180 - pattern.spacingDeg) draws.push([cx - this.width, cy]);
       if (tile.lng < -180 + pattern.spacingDeg) draws.push([cx + this.width, cy]);
@@ -693,16 +701,23 @@ export class FlatRouteMap {
     path.setAttribute('stroke-opacity', String(roundPixel(style.opacity)));
     this.routeGroup.appendChild(path);
 
-    // Dashes are measured in px on the real path, so a dash configured as a
-    // fraction of the route looks the same here as on the globe.
+    // Dashes are measured in px on the real path. A route-fraction pattern
+    // scales with the path; a world-unit pattern keeps a fixed px length —
+    // the flat map's twin of the globe's fixed arc length, so both worlds
+    // show the same dashes on the same route.
     const length = typeof path.getTotalLength === 'function' ? path.getTotalLength() : 0;
+    const worldToPx = this.width / (2 * Math.PI);
     if (style.dash) {
-      const [dash, gap] = dashArrayPx(style.dash, length);
+      const [dash, gap] = dashArrayPx(style.dash, length, worldToPx);
       path.setAttribute('stroke-dasharray', `${roundPixel(dash)} ${roundPixel(gap)}`);
       if (style.dash.speed > 0) {
         // --rd-dash-dir flips sign to reverse dash flow on return legs.
         path.style.setProperty('--rd-dash-period', `${roundPixel(dash + gap)}px`);
-        path.style.setProperty('--rd-dash-duration', `${Math.round(1000 / style.dash.speed)}ms`);
+        const flow = dashFlowPerSecond(style.dash, length / worldToPx);
+        path.style.setProperty(
+          '--rd-dash-duration',
+          `${Math.round(1000 / Math.max(0.001, flow))}ms`,
+        );
         path.style.setProperty('--rd-dash-dir', '1');
         path.setAttribute('class', 'rd-dash-flow');
       }

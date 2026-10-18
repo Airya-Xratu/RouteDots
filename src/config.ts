@@ -294,6 +294,9 @@ function sanitizeIcon(
   return icon;
 }
 
+/** Dash units a portable config may carry. */
+const DASH_UNITS = ['world', 'route'] as const;
+
 function sanitizeDash(
   value: unknown,
   path: string,
@@ -309,7 +312,13 @@ function sanitizeDash(
   put(out, 'speed', readNumber(source.speed, `${path}.speed`, warnings));
   put(out, 'width', readNumber(source.width, `${path}.width`, warnings));
   put(out, 'enabled', readBoolean(source.enabled, `${path}.enabled`, warnings));
-  noteUnknown(source, ['color', 'length', 'gap', 'speed', 'width', 'enabled'], path, warnings);
+  put(out, 'units', readEnum(source.units, DASH_UNITS, `${path}.units`, warnings));
+  noteUnknown(
+    source,
+    ['color', 'length', 'gap', 'speed', 'width', 'enabled', 'units'],
+    path,
+    warnings,
+  );
   return finish(out);
 }
 
@@ -651,9 +660,16 @@ function sanitizeHexTiles(
   const out: Record<string, unknown> = {};
   put(out, 'enabled', readBoolean(source.enabled, `${path}.enabled`, warnings));
   put(out, 'spacingDeg', readNumber(source.spacingDeg, `${path}.spacingDeg`, warnings));
+  put(out, 'sizeDeg', readNumber(source.sizeDeg, `${path}.sizeDeg`, warnings));
+  put(out, 'insetDeg', readNumber(source.insetDeg, `${path}.insetDeg`, warnings));
   put(out, 'color', readString(source.color, `${path}.color`, warnings, 80));
   put(out, 'opacity', readNumber(source.opacity, `${path}.opacity`, warnings));
-  noteUnknown(source, ['enabled', 'spacingDeg', 'color', 'opacity'], path, warnings);
+  noteUnknown(
+    source,
+    ['enabled', 'spacingDeg', 'sizeDeg', 'insetDeg', 'color', 'opacity'],
+    path,
+    warnings,
+  );
   return finish(out);
 }
 

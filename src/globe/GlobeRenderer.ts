@@ -14,7 +14,11 @@ import landTopo from '../data/land-110m.js';
 import countriesTopo from '../data/countries-110m.js';
 import { buildDotGrid, type DotPattern } from '../core/dotPattern.js';
 import { buildHexGrid, type HexPattern } from '../core/hexPattern.js';
-import { decodeCountryPolygons, decodeRings, type TopoLand } from '../core/topojson.js';
+import {
+  decodeCountryPolygonsCached,
+  decodeRings,
+  type TopoLand,
+} from '../core/topojson.js';
 import {
   PALETTES,
   paletteToGlobeTheme,
@@ -314,9 +318,27 @@ export class GlobeRenderer {
     );
   }
 
-  /** Builds or rebuilds the hex-tile overlay shell on top of the country fills. */
-  private buildHexOverlay(fallbackColor: string, hexOpts: HexTilesOptions, texWidth?: number): void {
-    // Tear down any previous overlay.
+  /**
+   * Restyles the hex-tile overlay live (spacing, size, border clearance,
+   * colour, opacity) — the `hexTiles` twin of {@link setColors}.
+   *
+   * Passing `undefined` or `enabled: false` removes the overlay. The overlay
+   * only exists on the `countries` surface, as it fills country interiors.
+   */
+  setHexTiles(options: HexTilesOptions | undefined): void {
+    this.hexOptions = options;
+    this.options.hexTiles = options;
+    const surface = this.options.surface ?? 'countries';
+    if (!options?.enabled || surface !== 'countries') {
+      this.disposeHexOverlay();
+      return;
+    }
+    const themeColors = paletteToGlobeTheme(this.paletteValue);
+    this.buildHexOverlay(themeColors.borders, options, this.options.texture?.width);
+  }
+
+  /** Removes the hex-tile overlay (mesh + texture), if any. */
+  private disposeHexOverlay(): void {
     if (this.hexMesh) {
       this.hexMesh.removeFromParent();
       this.hexMesh.geometry.dispose();
@@ -327,9 +349,20 @@ export class GlobeRenderer {
       this.hexTexture.dispose();
       this.hexTexture = null;
     }
+    this.hexPattern = null;
+  }
 
-    const polygons = decodeCountryPolygons(countriesTopo);
-    const pattern = buildHexGrid(polygons, { spacingDeg: hexOpts.spacingDeg });
+  /** Builds or rebuilds the hex-tile overlay shell on top of the country fills. */
+  private buildHexOverlay(fallbackColor: string, hexOpts: HexTilesOptions, texWidth?: number): void {
+    // Tear down any previous overlay.
+    this.disposeHexOverlay();
+
+    const polygons = decodeCountryPolygonsCached(countriesTopo);
+    const pattern = buildHexGrid(polygons, {
+      spacingDeg: hexOpts.spacingDeg,
+      sizeDeg: hexOpts.sizeDeg,
+      insetDeg: hexOpts.insetDeg,
+    });
     this.hexPattern = pattern;
 
     const tex = createHexTexture(pattern, {

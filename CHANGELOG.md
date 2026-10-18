@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Hexagon tiles inside countries (`hexTiles`)** — the `countries` surface can
+  fill every country interior with a hex tile grid, the hex twin of the `dots`
+  surface's dot lattice. `spacingDeg` (grid pitch), `sizeDeg` (tile
+  circum-radius, defaults to `0.85 · spacing / √3` so neighbours keep a small
+  gap), `insetDeg` (clearance from the border lines, `0.06 · spacingDeg` by
+  default so a tile never disappears under the stroke the borders are drawn
+  with), `color` and `opacity` are all configurable and apply live through
+  `setOptions({ hexTiles })`.
+  A tile is only drawn when the **whole hexagon** sits inside one country and
+  keeps `insetDeg` clear of every country border line, so no tile ever paints
+  over a border or bleeds into a neighbour — narrow countries just get fewer
+  tiles until you lower the spacing. Rings that the atlas stores as a coast
+  polyline across the whole map (Antarctica) are closed through the pole
+  instead of by a leap from +180° back to −180°, which used to read as a border
+  line straight across the map (`src/core/hexPattern.ts`).
+- **Fixed-length route dashes (`dash.units`)** — `dash.length` / `dash.gap` can
+  now be measured in **world units** (globe radii on the sphere, degrees on the
+  flat map) instead of as fractions of the route, so a short hop and a long
+  haul carry the same dashes and the same gaps; a longer route simply fits more
+  of them. `units: 'world'` is the built-in default (sized so a 90° route keeps
+  the historical 14-dash look); bare `length` / `gap` numbers without a `units`
+  key keep the historical route-fraction reading, and `units: 'route'` asks for
+  it explicitly. `dash.speed` is the travel speed in globe radii per second in
+  world units, so the dashes flow at the same pace on every route.
+  The customization studio's **Route dashes** panel switches between
+  "Same on every route" and "Stretched along the route", and reads lengths out
+  in km.
+- The studio's **Scene** panel grew a **Hexagon tiles** block: on/off, tile
+  spacing, tile size (with the neighbour gap in the readout), gap from borders,
+  opacity and colour — disabled while the surface is the dot lattice.
+
 - **Portable config JSON** — the showcase studio's side panel exports the live
   scene as `routedots.config.json` (edit, apply, copy, download, or import).
   A project that depends on the library loads that file with
@@ -41,6 +72,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Route dashes are the same length on every route.** Dash length and gap were
+  fractions of the whole route, so a long haul stretched the pattern and its
+  gaps while a short hop squeezed them — the gap between two cities depended on
+  how far apart they were. The pattern is now a fixed length on the ground (see
+  `dash.units` above).
 - **3D globe: route-line customizations now show.** `route.width` /
   `route.dash.width` are authored in px by the docs and the customization
   studio (e.g. `dash: { …, width: 1.8 }`), but the globe fed the raw number
