@@ -668,6 +668,28 @@ changes, `dispose()` on unmount.
 — is [Portable config](#portable-config). The call is
 `RouteDots.fromConfig(el, config)`.
 
+**The flat atlas look** — solid country fills on a paper-coloured ocean,
+hairline white borders, the whole world at rest, then a zoom to the route:
+
+```ts
+const rd = new RouteDots(el, {
+  world: 'flat',
+  surface: 'countries', // filled countries (not the dot lattice)
+  colors: {
+    ocean: '#f4efea', // page + ocean
+    countries: '#2f8db6', // country fills
+    borders: '#ffffff', // hairline borders
+    outbound: '#123b4d',
+    cities: '#123b4d',
+  },
+  cities: { enabled: false }, // no airport-city dots on a static-looking map
+  labels: { fontSize: 13 }, // 13 px on screen, at every zoom
+  flat: { zoomDurationMs: 1000 }, // the world view → route zoom
+});
+
+rd.setRoute('LHR', 'DXB', { roundTrip: true }); // zoom first, then draw
+```
+
 **Colours:**
 
 ```ts
