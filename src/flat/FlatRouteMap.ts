@@ -723,10 +723,20 @@ export class FlatRouteMap {
     this.frameWorldView();
   }
 
-  /** Re-frames on container resize (the route stays framed). */
+  /**
+   * Re-frames on container resize (the route stays framed).
+   *
+   * The observer also fires once as soon as it starts watching: that first
+   * call must not disturb a zoom that is already playing (a route set at
+   * mount), so only a *changed* size re-frames.
+   */
   private observeSize(): void {
     if (typeof ResizeObserver === 'undefined') return;
-    this.resizeObserver = new ResizeObserver(() => this.reframe());
+    this.resizeObserver = new ResizeObserver(() => {
+      const viewport = this.viewportSize();
+      if (viewport.w === this.lastViewport.w && viewport.h === this.lastViewport.h) return;
+      this.reframe();
+    });
     this.resizeObserver.observe(this.container);
   }
 
