@@ -20,13 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   arcs, airport dots, city names and plane drawn — `rd.on('route:drawn')` now
   fires in flat mode too. `clearRoute` eases back out to the world view. Tune
   it with `flat.zoomToRoute` (default `true`), `flat.zoomDurationMs` (900) and
-  `flat.maxRouteZoom` (2.2); `frameRoute: false` disables it, and an OS-level
+  `flat.maxRouteZoom` (8); `frameRoute: false` disables it, and an OS-level
   `prefers-reduced-motion` draws instantly. The framing maths is pure and
   unit-tested in `src/flat/framing.ts`.
+- **Changing the cities is one smooth move, and close pairs get a real
+  close-up.** Replacing an already-drawn route no longer chains two tweens
+  (which paused at the wide view): the camera follows a single `ViewPath`
+  `[current, world, target]`, played by `pathProgress`, which eases each leg on
+  its own — it settles onto the whole world, sweeps through it and dives into
+  the new pair without a stop or a bounce. Zoom is also interpolated in log
+  space (`blendView`), and a multi-leg move gets 1.5 × the zoom budget (max
+  12 s). The route framer zooms much further in when the cities are close:
+  `flat.maxRouteZoom` now defaults to **8** (was 2.2), limited by a new
+  min-visible-span guard (`fitPointsView(..., { minVisibleSpanPx })`, ~90 map px
+  of the world's shorter side) so a close-up still shows some geography around
+  the airports. At these deeper zooms the country-fill canvas is supersampled
+  2× (CSS-scaled back down) so coastlines stay crisp, and city dots + ripple
+  rings are now sized in screen px like the labels.
 - **City-name text size is a screen size.** `labels.fontSize` is now the size
   the visitor sees: the flat map counter-scales the names by its own zoom, so
-  a route zoomed to 2.2× does not blow the city name up to billboard size
-  (`labels.scaleWithZoom: true` restores the map-space behaviour). Airport
+  a route zoomed several times in does not blow the city name up to billboard
+  size (`labels.scaleWithZoom: true` restores the map-space behaviour). Airport
   dots and the plane follow the same rule, and route + border strokes use
   `vector-effect: non-scaling-stroke`, so a zoomed flat map keeps hairline
   borders and px-wide routes. The showcase's **City labels** panel grew a

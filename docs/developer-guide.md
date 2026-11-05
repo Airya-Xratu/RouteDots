@@ -291,30 +291,41 @@ holds **both airports and the arc between them**, and the route — arcs,
 airport dots, city names, plane — is drawn once the zoom has landed. Clearing
 the route eases back out to the world view.
 
-Changing the cities while a route is on screen is a **two-leg move**: the
-camera first pulls back out to the whole world (the old route stays on the map
-for the ride, then leaves as the map settles), then dives into the new pair
-and draws it. The same `zoomDurationMs` budget is split roughly 40 / 60
-between the two legs, so a new flight never looks like a pan between two
-close-ups. When the map is already at the world view (a first route, or after
-a clear), it simply dives in once.
+Changing the cities while a route is on screen is **one continuous move out
+and back**: the camera pulls back to the whole world (the old route rides the
+pull-back and leaves exactly as the map settles on the world view), then dives
+into the new pair and draws it. It is a single camera path
+(`buildViewPath([current, world, target])`) played as one tween, with each leg
+eased on its own (`pathProgress`), so the camera _settles_ onto the wide view
+instead of bouncing through it — and never pauses between the two halves. A
+multi-leg move gets a longer budget (`1.5 × zoomDurationMs`, capped at 12 s) so
+it does not feel rushed. When the map is already at the world view (a first
+route, or after a clear), it simply dives in once.
 
 | Key              | Default | Description                                                             |
 | ---------------- | ------- | ----------------------------------------------------------------------- |
 | `zoomToRoute`    | `true`  | Fly to the route before drawing it. `false` draws it on the world view. |
 | `zoomDurationMs` | `900`   | How long the zoom takes, in ms (`0` = instantly).                       |
-| `maxRouteZoom`   | `2.2`   | Zoom-in cap: a short hop is framed, not magnified into a microscope.    |
+| `maxRouteZoom`   | `8`     | Zoom-in ceiling — reachable only by very close city pairs.              |
 
-The framing never zooms _out_ past the world view, so even an antipodal route
-keeps both airports on screen, and it keeps a screen-space margin around the
-route for the airport dots and the city names. `frameRoute: false` on
+The zoom is also limited by **context**: `fitPointsView` never lets the frame
+show less than ~90 map px of the world (its shorter side), so two nearby
+airports get a real close-up — London/Paris lands at ~8× on a 1280 × 800 hero,
+where the old 2.2× cap left them as two specks — while still keeping a slice of
+geography around the cities on screen. The framing never zooms _out_ past the
+world view, so even an antipodal route keeps both airports on screen, and it
+keeps a screen-space margin around the route for the airport dots and the city
+names. Zoom itself is interpolated in log space (`blendView`), which is what
+makes a 2× → 8× move feel even rather than front-loaded, and the country-fill
+canvas is rendered at 2× and scaled down by CSS so the coastline stays crisp at
+those deeper zooms. `frameRoute: false` on
 `RouteDots` turns the whole thing off (both worlds); an OS-level
 `prefers-reduced-motion` is honoured as well.
 
 ```ts
 new RouteDots(el, {
   world: 'flat',
-  flat: { zoomToRoute: true, zoomDurationMs: 1200, maxRouteZoom: 2.6 },
+  flat: { zoomToRoute: true, zoomDurationMs: 1200, maxRouteZoom: 12 },
   labels: { fontSize: 14 }, // 14 px, zoom or no zoom
 });
 // rd.on('route:drawn', …) fires when the zoom has landed and the route is up.

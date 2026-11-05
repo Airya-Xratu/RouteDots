@@ -44,15 +44,18 @@ import { flatArcGeometry, type FlatArcGeometry } from './routePath.js';
 import {
   DEFAULT_MAX_ROUTE_ZOOM,
   DEFAULT_ZOOM_DURATION_MS,
-  ZOOM_OUT_SHARE,
+  MULTI_LEG_DURATION_FACTOR,
+  buildViewPath,
   fitPointsView,
   fitWorldView,
   isWorldFraming,
+  pathProgress,
   screenSpaceScale,
-  tweenView,
+  viewAlongPath,
   type FlatPoint,
   type FlatView,
   type FlatViewport,
+  type ViewPath,
 } from './framing.js';
 import {
   easeFactor,
@@ -230,6 +233,13 @@ const NS = 'http://www.w3.org/2000/svg';
 /** Follow-chase strength for the flat camera (per second). */
 const FOLLOW_EASE_PER_SECOND = 3;
 
+/**
+ * The country fills are a canvas painted once in map px. At a route close-up
+ * the map can zoom several times over, so the canvas is rendered at 2× and
+ * down-scaled by CSS — coastlines stay clean instead of going soft.
+ */
+const SURFACE_SUPERSAMPLE = 2;
+
 /** True when the visitor asked the OS for fewer animations. */
 function prefersReducedMotion(): boolean {
   return (
@@ -239,6 +249,13 @@ function prefersReducedMotion(): boolean {
   );
 }
 
+/**
+ * Transform precision for the camera. Two decimals (the `roundPixel` used for
+ * geometry) is too coarse for a slow zoom: it steps the scale in ~1 % jumps,
+ * which reads as stutter. Scale keeps five decimals, positions stay sub-pixel.
+ */
+const roundTransform = (value: number): number => Math.round(value * 1e5) / 1e5;
+
 /** A city name attached to an airport dot (map px anchor). */
 interface FlatLabel {
   el: SVGTextElement;
@@ -246,13 +263,27 @@ interface FlatLabel {
   y: number;
 }
 
-/** A camera zoom that is played out over time. */
+/** A point along a camera move where something else happens (once). */
+interface ViewMilestone {
+  at: number;
+  run: () => void;
+  fired?: boolean;
+}
+
+/** A camera move that is played out over time. */
 interface ViewTween {
-  from: FlatView;
-  to: FlatView;
+  path: ViewPath;
   start: number;
   duration: number;
+  milestones: ViewMilestone[];
   onDone: (() => void) | null;
+}
+
+/** The SVG element + its configured (screen px) size, before zoom scaling. */
+interface ScaledCircle {
+  el: SVGCircleElement;
+  radius: number;
+  strokeWidth?: number;
 }
 
 export class FlatRouteMap {
@@ -296,8 +327,12 @@ export class FlatRouteMap {
   private pointerDown = false;
   private lastPointer = { x: 0, y: 0 };
   private readonly abort = new AbortController();
-  /** The zoom currently playing (world → route, or route → world). */
+  /** The camera move currently playing (world → route, route → world…). */
   private tween: ViewTween | null = null;
+  /** Airport-city dots, kept screen-sized by `syncOverlayScale`. */
+  private cityDots: ScaledCircle[] = [];
+  /** Airport-city ripple rings, kept screen-sized by `syncOverlayScale`. */
+  private cityRings: ScaledCircle[] = [];
   /** True once the route's arcs/markers/labels are on the map. */
   private routeDrawn = false;
   /** True once the world view has been fitted to a real viewport size. */
@@ -367,8 +402,8 @@ export class FlatRouteMap {
     this.worldEl.appendChild(this.stage);
 
     this.canvas = document.createElement('canvas');
-    this.canvas.width = this.width;
-    this.canvas.height = this.height;
+    this.canvas.width = this.width * SURFACE_SUPERSAMPLE;
+    this.canvas.height = this.height * SURFACE_SUPERSAMPLE;
     this.canvas.style.width = '100%';
     this.canvas.style.height = '100%';
     this.canvas.style.position = 'absolute';
@@ -487,20 +522,19 @@ export class FlatRouteMap {
     }
 
     const world = this.worldView();
-    const duration = this.zoomDuration();
-    // A new flight chosen from an existing, zoomed-in one: pull back to the
-    // world first (keeping the old route on screen for the ride), then zoom
-    // into the new airports.
-    if (previousDrawn && duration > 0 && !isWorldFraming(this.view, world)) {
-      const outMs = Math.max(120, Math.round(duration * ZOOM_OUT_SHARE));
-      const inMs = Math.max(120, duration - outMs);
-      this.zoomTo(
-        world,
-        () => {
-          this.clearRouteVisuals();
-          this.zoomTo(target, () => this.drawRoute(), inMs);
-        },
-        outMs,
+    // A new flight chosen from an existing, zoomed-in one: **one** continuous
+    // move out to the whole world and back into the new pair. The old route
+    // rides the pull-back and leaves exactly as the camera passes the world
+    // view; the new route is drawn when the dive lands. It is a single path
+    // with each leg eased (`pathProgress`), so the camera settles onto the
+    // wide view and sweeps on rather than stopping or bouncing there.
+    if (previousDrawn && this.zoomDuration() > 0 && !isWorldFraming(this.view, world)) {
+      const path = buildViewPath([this.view, world, target]);
+      this.startTween(
+        path,
+        3,
+        [{ at: path.stops[1] ?? 0.5, run: () => this.clearRouteVisuals() }],
+        () => this.drawRoute(),
       );
       return;
     }
@@ -696,42 +730,77 @@ export class FlatRouteMap {
     this.applyView();
   }
 
-  /** How long a zoom should take, honouring reduced-motion preferences. */
-  private zoomDuration(overrideMs?: number): number {
-    const duration = overrideMs ?? this.options.zoomDurationMs ?? DEFAULT_ZOOM_DURATION_MS;
-    if (!Number.isFinite(duration) || duration <= 0) return 0;
+  /**
+   * How long a camera move should take, honouring reduced-motion preferences.
+   * A multi-leg move (out to the world and back in) gets a longer budget, so
+   * the extra travel does not make it feel rushed.
+   */
+  private zoomDuration(legs = 1, overrideMs?: number): number {
+    const base = overrideMs ?? this.options.zoomDurationMs ?? DEFAULT_ZOOM_DURATION_MS;
+    if (!Number.isFinite(base) || base <= 0) return 0;
     if (prefersReducedMotion()) return 0;
-    return Math.min(10_000, duration);
+    const factor = legs > 2 ? MULTI_LEG_DURATION_FACTOR : 1;
+    return Math.min(12_000, Math.round(base * factor));
   }
 
-  /** Eases the camera to `to`; calls `onDone` when it lands (or at once). */
-  private zoomTo(to: FlatView, onDone: (() => void) | null, durationMs?: number): void {
+  /**
+   * Plays a camera move along `path`; calls `onDone` when it lands (or at
+   * once, for reduced motion / `zoomDurationMs: 0`).
+   */
+  private startTween(
+    path: ViewPath,
+    legs: number,
+    milestones: ViewMilestone[],
+    onDone: (() => void) | null,
+    durationMs?: number,
+  ): void {
     this.following = false;
-    const duration = this.zoomDuration(durationMs);
+    const target = path.views[path.views.length - 1] ?? this.view;
+    const duration = this.zoomDuration(legs, durationMs);
     if (duration <= 0) {
       this.tween = null;
-      this.view = { ...to };
+      this.view = { ...target };
       this.applyView();
+      for (const milestone of milestones) {
+        milestone.fired = true;
+        milestone.run();
+      }
       onDone?.();
       return;
     }
     this.tween = {
-      from: { ...this.view },
-      to: { ...to },
+      path,
       start: performance.now(),
       duration,
+      milestones,
       onDone,
     };
   }
 
-  /** Plays one frame of the running zoom (if any). */
+  /** Eases the camera to `to` (one leg); calls `onDone` when it lands. */
+  private zoomTo(to: FlatView, onDone: (() => void) | null, durationMs?: number): void {
+    this.startTween(buildViewPath([this.view, to]), 1, [], onDone, durationMs);
+  }
+
+  /** Plays one frame of the running camera move (if any). */
   private stepTween(now: number): void {
     const tween = this.tween;
     if (!tween) return;
-    const progress =
-      tween.duration > 0 ? Math.min(1, Math.max(0, (now - tween.start) / tween.duration)) : 1;
-    this.view = tweenView(tween.from, tween.to, progress);
+    const elapsed = tween.duration > 0 ? (now - tween.start) / tween.duration : 1;
+    const progress = Math.min(1, Math.max(0, elapsed));
+    // Each leg is eased on its own (see `pathProgress`): the camera settles
+    // onto a middle keyframe instead of bouncing through it at full speed, and
+    // milestones live in *path* space, so they fire on the position, not the
+    // clock.
+    const position = pathProgress(tween.path, progress);
+    this.view = viewAlongPath(tween.path, position);
     this.applyView();
+    for (const milestone of tween.milestones) {
+      if (!milestone.fired && position >= milestone.at) {
+        milestone.fired = true;
+        milestone.run();
+      }
+    }
     if (progress < 1) return;
     this.tween = null;
     tween.onDone?.();
@@ -806,12 +875,32 @@ export class FlatRouteMap {
       const cy = Number(marker.getAttribute('cy'));
       marker.setAttribute(
         'transform',
-        `translate(${roundPixel(cx)} ${roundPixel(cy)}) scale(${roundPixel(k)}) translate(${roundPixel(
-          -cx,
-        )} ${roundPixel(-cy)})`,
+        `translate(${roundPixel(cx)} ${roundPixel(cy)}) scale(${roundTransform(
+          k,
+        )}) translate(${roundPixel(-cx)} ${roundPixel(-cy)})`,
       );
     }
     for (const label of this.labelEls) this.placeLabel(label);
+    // The airport-city dots and their ripples are markers on the map, not
+    // geography: they keep their configured px size however far the map zooms.
+    this.scaleMarkers(this.cityDots, k);
+    this.scaleMarkers(this.cityRings, k);
+  }
+
+  /**
+   * Applies the screen-space factor to a list of circles: radius (and stroke
+   * width, for rings) shrink as the map zooms, so their px size stays put.
+   */
+  private scaleMarkers(list: readonly ScaledCircle[], k: number): void {
+    for (const marker of list) {
+      marker.el.setAttribute('r', String(roundTransform(Math.max(0.05, marker.radius * k))));
+      if (marker.strokeWidth !== undefined) {
+        marker.el.setAttribute(
+          'stroke-width',
+          String(roundTransform(Math.max(0.05, marker.strokeWidth * k))),
+        );
+      }
+    }
   }
 
   /** Positions + scales one city label for the current view. */
@@ -825,7 +914,7 @@ export class FlatRouteMap {
     label.el.setAttribute('y', String(y));
     label.el.setAttribute(
       'transform',
-      `translate(${x} ${y}) scale(${roundPixel(placement.scale)}) translate(${roundPixel(
+      `translate(${x} ${y}) scale(${roundTransform(placement.scale)}) translate(${roundPixel(
         -x,
       )} ${roundPixel(-y)})`,
     );
@@ -836,13 +925,24 @@ export class FlatRouteMap {
     return [((p.lng + 180) / 360) * this.width, ((90 - p.lat) / 180) * this.height];
   }
 
+  /**
+   * The surface canvas context, in **map px**: the bitmap is supersampled, so
+   * every drawing call stays in the map's own coordinate space.
+   */
+  private surfaceContext(): CanvasRenderingContext2D | null {
+    const ctx = this.canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.setTransform(SURFACE_SUPERSAMPLE, 0, 0, SURFACE_SUPERSAMPLE, 0, 0);
+    return ctx;
+  }
+
   /** Paints the grey country fills (even-odd, so enclaves stay empty). */
   private renderSurface(): void {
     if ((this.options.surface ?? 'countries') === 'dots') {
       this.renderDots(this.options.stepDeg ?? 2, (this.options.land ?? landTopo) as TopoLand);
       return;
     }
-    const ctx = this.canvas.getContext('2d');
+    const ctx = this.surfaceContext();
     if (!ctx) return;
     ctx.clearRect(0, 0, this.width, this.height);
     ctx.fillStyle = this.theme.land;
@@ -864,7 +964,7 @@ export class FlatRouteMap {
    * the globe overlay, rasterised directly to the flat canvas.
    */
   private renderHexTiles(hexOpts: HexTilesOptions): void {
-    const ctx = this.canvas.getContext('2d');
+    const ctx = this.surfaceContext();
     if (!ctx) return;
     const polygons = decodeCountryPolygonsCached(countriesTopo);
     const pattern = buildHexGrid(polygons, {
@@ -907,7 +1007,7 @@ export class FlatRouteMap {
 
   private renderDots(stepDeg: number, topo: TopoLand): void {
     const pattern = buildDotGrid(decodeRings(topo), { stepDeg });
-    const ctx = this.canvas.getContext('2d');
+    const ctx = this.surfaceContext();
     if (!ctx) return;
     ctx.clearRect(0, 0, this.width, this.height);
     ctx.fillStyle = this.theme.dot;
@@ -929,6 +1029,8 @@ export class FlatRouteMap {
    */
   private renderCities(): void {
     this.cityGroup.innerHTML = '';
+    this.cityDots = [];
+    this.cityRings = [];
     if (this.options.cities?.enabled === false) return;
     const style = this.cityStyle;
     const sizes = flatCityMarkerSizes(style);
@@ -950,6 +1052,7 @@ export class FlatRouteMap {
         ring.setAttribute('stroke-width', String(roundPixel(sizes.ringWidth)));
         ring.style.animationDelay = delay;
         this.cityGroup.appendChild(ring);
+        this.cityRings.push({ el: ring, radius: sizes.ringRadius, strokeWidth: sizes.ringWidth });
       }
       if (style.dot.enabled) {
         const dot = document.createElementNS(NS, 'circle');
@@ -961,8 +1064,13 @@ export class FlatRouteMap {
         dot.setAttribute('opacity', String(style.dot.dim));
         dot.style.animationDelay = delay;
         this.cityGroup.appendChild(dot);
+        this.cityDots.push({ el: dot, radius: sizes.dotRadius });
       }
     });
+    // Keep the markers at their configured px size for the current zoom.
+    const k = screenSpaceScale(this.view.scale);
+    this.scaleMarkers(this.cityDots, k);
+    this.scaleMarkers(this.cityRings, k);
   }
 
   /** Draws the country borders as SVG polylines under the city layer. */
@@ -1194,7 +1302,9 @@ export class FlatRouteMap {
     const { scale, cx, cy } = this.view;
     const tx = vw / 2 - cx * scale;
     const ty = vh / 2 - cy * scale;
-    this.stage.style.transform = `translate3d(${roundPixel(tx)}px, ${roundPixel(ty)}px, 0) scale(${roundPixel(scale)})`;
+    this.stage.style.transform = `translate3d(${roundPixel(tx)}px, ${roundPixel(
+      ty,
+    )}px, 0) scale(${roundTransform(scale)})`;
     this.syncOverlayScale();
   }
 

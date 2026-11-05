@@ -121,9 +121,12 @@ test('flat world: whole world at rest, zoom to the route, then draw it', async (
   expect(framed.paths).toBe(1);
   expect(framed.labels).toEqual(['London', 'Dubai']);
 
-  // Zoomed in, but not into a microscope.
-  expect(framed.view.scale).toBeGreaterThan(rest.view.scale);
-  expect(framed.view.scale).toBeLessThanOrEqual(2.2);
+  // Zoomed in on the city pair — a real close-up, not the old 2.2× cap.
+  expect(framed.view.scale).toBeGreaterThan(rest.view.scale * 3);
+  expect(framed.view.scale).toBeGreaterThan(4);
+  // …but never into a microscope: at least ~90 map px of the world stays on
+  // screen, so there is always some geography around the two cities.
+  expect(framed.viewport.h / framed.view.scale).toBeGreaterThanOrEqual(88);
 
   // Both airports are on screen, with room for their dots and city names.
   for (const airport of [lhr, dxb]) {
@@ -197,6 +200,19 @@ test('changing the airports zooms out to the world, then into the new route', as
   const state = await page.evaluate(() => (window as unknown as Hooks).__state);
   expect(state.error, `fixture error: ${state.error}`).toBeNull();
 
+  // The resting, world-wide framing — where the camera must return to.
+  const world = await page.evaluate(() => {
+    const map = document.getElementById('map')!;
+    const view = (window as unknown as Hooks).__rd.getFlatMap()!.getViewState();
+    return {
+      scale: view.scale,
+      cx: view.cx,
+      cy: view.cy,
+      width: map.clientWidth,
+      height: map.clientHeight,
+    };
+  });
+
   // First flight: world view → LHR/DXB.
   await page.evaluate(() => {
     (window as unknown as Hooks).__rd.setRoute('LHR', 'DXB', { roundTrip: true });
@@ -204,21 +220,23 @@ test('changing the airports zooms out to the world, then into the new route', as
   await page.waitForFunction(() => (window as unknown as Hooks).__state.drawn === 1, undefined, {
     timeout: 5000,
   });
-  const world = await page.evaluate(() => {
-    const map = document.getElementById('map')!;
-    const view = (window as unknown as Hooks).__rd.getFlatMap()!.getViewState();
-    return { scale: view.scale, width: map.clientWidth, height: map.clientHeight };
-  });
 
   // Second flight: the camera has to pull back out to the world before it
   // dives into Singapore — sample the framing while it travels.
   const samples = await page.evaluate(async () => {
-    const hooks = window as unknown as Hooks & { __samples: number[]; __drawn: number[] };
+    const hooks = window as unknown as Hooks & {
+      __samples: number[];
+      __drawn: number[];
+      __views: View[];
+    };
     hooks.__samples = [];
     hooks.__drawn = [];
+    hooks.__views = [];
     const tick = () => {
       const rd = hooks.__rd;
-      hooks.__samples.push(rd.getFlatMap()!.getViewState().scale);
+      const view = rd.getFlatMap()!.getViewState();
+      hooks.__samples.push(view.scale);
+      hooks.__views.push(view);
       hooks.__drawn.push(hooks.__state.drawn);
       if (hooks.__state.drawn < 2) requestAnimationFrame(tick);
     };
@@ -230,6 +248,7 @@ test('changing the airports zooms out to the world, then into the new route', as
     });
     return {
       scales: hooks.__samples,
+      views: hooks.__views,
       drawn: hooks.__drawn,
       view: hooks.__rd.getFlatMap()!.getViewState(),
       labels: Array.from(document.querySelectorAll('[data-rd-layer="routes"] text')).map(
@@ -242,8 +261,36 @@ test('changing the airports zooms out to the world, then into the new route', as
   const minScale = Math.min(...samples.scales);
   // Pulled all the way back to the world view…
   expect(minScale).toBeLessThan(world.scale * 1.05);
-  expect(minScale).toBeGreaterThan(world.scale * 0.9);
+  // …and not further out than the world view (no drift into empty sea).
+  expect(minScale).toBeGreaterThan(world.scale * 0.85);
   expect(Math.max(...samples.scales)).toBeGreaterThan(world.scale * 1.5);
+
+  // The pull-back really is the *world*: at its widest the camera sits on the
+  // world framing, both in scale and in centre.
+  const widest = samples.views[samples.scales.indexOf(minScale)]!;
+  expect(widest.cx).toBeCloseTo(world.cx, 0);
+  expect(widest.cy).toBeCloseTo(world.cy, 0);
+
+  // Smooth, not a bounce: the camera never jumps between frames…
+  let worstStep = 0;
+  for (let i = 1; i < samples.views.length; i++) {
+    const prev = samples.views[i - 1]!;
+    const next = samples.views[i]!;
+    worstStep = Math.max(worstStep, Math.abs(Math.log(next.scale / prev.scale)));
+  }
+  expect(worstStep).toBeLessThan(0.6);
+  // …and it never sits still at the wide shot: the turnaround is a smooth
+  // slowdown, not a pause between two halves.
+  let dwell = 0;
+  for (let i = 1; i < samples.views.length; i++) {
+    const prev = samples.views[i - 1]!;
+    const next = samples.views[i]!;
+    const moved =
+      Math.abs(Math.log(next.scale / prev.scale)) > 1e-3 ||
+      Math.hypot(next.cx - prev.cx, next.cy - prev.cy) > 0.5;
+    if (!moved) dwell += 1;
+  }
+  expect(dwell).toBeLessThanOrEqual(2);
   // …with the old route still on screen for the ride out, and the new one
   // only after the dive has landed.
   expect(samples.drawn[0]).toBe(1);
@@ -271,4 +318,55 @@ test('a route set while already at the world view dives in once, without a pull-
   });
   // The camera never dips below where it started: a single zoom-in.
   expect(Math.min(...result.scales)).toBeGreaterThanOrEqual(result.before - 1e-6);
+});
+
+test('two nearby cities zoom in much further than a long haul', async ({ page }) => {
+  await page.goto(new URL('./fixtures/zoom.html', import.meta.url).href);
+  const state = await page.evaluate(() => (window as unknown as Hooks).__state);
+  expect(state.error, `fixture error: ${state.error}`).toBeNull();
+
+  const longHaul = await page.evaluate(async () => {
+    const hooks = window as unknown as Hooks;
+    hooks.__rd.setRoute('LHR', 'SIN', { roundTrip: true });
+    while (hooks.__state.drawn < 1) await new Promise((r) => setTimeout(r, 20));
+    const map = document.getElementById('map')!;
+    return {
+      view: hooks.__rd.getFlatMap()!.getViewState(),
+      viewport: { w: map.clientWidth, h: map.clientHeight },
+    };
+  });
+
+  // London → Paris: a 350 km hop. The framing has to come right down on the
+  // two cities instead of leaving them as two specks in a continent.
+  const shortHop = await page.evaluate(async () => {
+    const hooks = window as unknown as Hooks;
+    hooks.__rd.setRoute('LHR', 'CDG', { roundTrip: true });
+    while (hooks.__state.drawn < 2) await new Promise((r) => setTimeout(r, 20));
+    const map = document.getElementById('map')!;
+    return {
+      view: hooks.__rd.getFlatMap()!.getViewState(),
+      viewport: { w: map.clientWidth, h: map.clientHeight },
+      labels: Array.from(document.querySelectorAll('[data-rd-layer="routes"] text')).map(
+        (el) => el.textContent,
+      ),
+    };
+  });
+
+  expect(shortHop.labels).toEqual(['London', 'Paris']);
+  expect(longHaul.view.scale).toBeGreaterThan(1.5);
+  // Several times tighter than the long haul…
+  expect(shortHop.view.scale).toBeGreaterThan(longHaul.view.scale * 2.5);
+  // …and close to the configured maximum (8 by default).
+  expect(shortHop.view.scale).toBeGreaterThan(6);
+  // Both airports still sit inside the frame with room for dot and name.
+  const cdg = { x: ((2.352 + 180) / 360) * MAP.width, y: ((90 - 48.857) / 180) * MAP.height };
+  for (const airport of [lhr, cdg]) {
+    const point = toScreen(airport, shortHop.view, shortHop.viewport);
+    expect(point.x).toBeGreaterThan(40);
+    expect(point.x).toBeLessThan(shortHop.viewport.w - 40);
+    expect(point.y).toBeGreaterThan(40);
+    expect(point.y).toBeLessThan(shortHop.viewport.h - 40);
+  }
+  // At this zoom the map is still readable: not less than ~90 map px visible.
+  expect(shortHop.viewport.h / shortHop.view.scale).toBeGreaterThanOrEqual(88);
 });

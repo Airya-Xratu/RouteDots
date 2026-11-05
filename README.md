@@ -63,9 +63,10 @@ and a flat 2D fallback for browsers without WebGL.
   **whole world**, letterboxed in your palette — filled countries, hairline
   borders, no crop. Pick a flight and it **zooms to it with a smooth ease**,
   far enough that both airports and the arc between them are in view, and only
-  then draws the route. Change the cities and it **pulls back out to the whole
-  world first, then dives into the new pair** (the old route rides the
-  zoom-out); clearing it zooms back out too. The framing is pure maths
+  then draws the route — close city pairs get a much tighter close-up than
+  long hauls. Change the cities and it **pulls back out to the whole world
+  first, then dives into the new pair** in one continuous, eased move (the old
+  route rides the zoom-out); clearing it zooms back out too. The framing is pure maths
   (`flat/framing.ts`), never zooms further out than the whole world, and is
   tunable with `flat.zoomToRoute` / `zoomDurationMs` / `maxRouteZoom`
   (`frameRoute: false` switches it off).

@@ -215,15 +215,25 @@ Two framings, both from pure maths in `flat/framing.ts`:
   visitor sees the entire styled planet before choosing a flight.
 - **Route view** — `fitPointsView` fits the two airports plus the arc's control
   point with a screen-space margin, clamped between the world-view scale (never
-  zoom out past the whole world) and `maxRouteZoom` (never magnify a short hop
-  into a microscope).
+  zoom out past the whole world) and a zoom ceiling (`maxRouteZoom`, 8 by
+  default) that is further tightened so at least ~90 map px of the world stay on
+  screen — a close pair gets a real close-up, without turning into a microscope.
 
-`setRoute` starts a `tweenView` (900 ms, `easeInOutCubic`) from the current
-framing to the route framing; the arcs, airport dots, city names and plane are
-built only when that tween lands, and `clearRoute` eases back out. Replacing an
-already-drawn route chains two tweens — out to the world view (old route still
-on screen), then in to the new pair — which keeps a destination change readable
-as "up, across, down". Screen-space
+Both are `FlatView { scale, cx, cy }`, and the camera interpolates them
+perceptually (`blendView`: log scale, linear pan) so a 2× → 8× move does not
+feel front-loaded.
+
+`setRoute` builds a `ViewPath` — a list of keyframes plus normalised stops —
+and plays it as **one** tween (`zoomDuration(legs)`: 900 ms, × 1.5 for a
+multi-leg move, capped at 12 s). A first route is a two-keyframe path
+(current → route framing); replacing an already-drawn route is a three-keyframe
+path `[current, world, target]`, with a milestone at the world stop that clears
+the old route visuals. Playback maps the clock onto the path with
+`pathProgress`, which eases **each leg** (smoothstep): the camera slows into the
+wide view and accelerates out of it, so a destination change reads as one
+"up, across, down" arc rather than two tweens with a stop between them. The
+arcs, airport dots, city names and plane are built only when the tween lands,
+and `clearRoute` eases back out. Screen-space
 overlay elements (city names, airport dots, plane) are counter-scaled by
 `screenSpaceScale(view.scale)`, and route/border strokes use
 `vector-effect: non-scaling-stroke`, so zooming does not inflate typography or

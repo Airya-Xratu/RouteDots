@@ -8,9 +8,15 @@
  *   map's own aspect ratio preserved. This is what a visitor sees before any
  *   route exists.
  * - **the route view** — zoomed in far enough that both airports (and the arc
- *   between them) are comfortably inside the viewport. The zoom-in is capped,
- *   so a short hop does not turn into a 20× microscope, and it never zooms out
- *   past the world view, so an antipodal route still shows the whole planet.
+ *   between them) fill the viewport. The cap is generous, and it is limited
+ *   further by how much of the world may leave the screen (see
+ *   {@link RouteFrameOptions.minVisibleSpanPx}), so a short hop gets a real
+ *   close-up while a long haul still shows a whole region — and it never zooms
+ *   out past the world view, so an antipodal route shows the whole planet.
+ *
+ * The camera flies along a {@link ViewPath}: one continuous, eased, perceptually
+ * even move (see {@link blendView}) that may pass through several keyframes —
+ * e.g. `current → whole world → new route` when the visitor switches cities.
  *
  * Pure maths + pure value objects: no DOM, no three.js, unit-tested.
  */
@@ -47,18 +53,36 @@ export const WORLD_VIEW_FILL = 0.98;
 /** Screen-space margin kept around a framed route, in CSS px. */
 export const ROUTE_FRAME_MARGIN_PX = 56;
 
-/** Never zoom a route in further than this (a 2 × 2 map px per CSS px cap). */
-export const DEFAULT_MAX_ROUTE_ZOOM = 2.2;
+/**
+ * The furthest a route may zoom in (map px per CSS px). Far routes are framed
+ * by their own fit — this only bounds short hops, so two neighbouring cities
+ * get a close-up instead of a microscope on one town.
+ */
+export const DEFAULT_MAX_ROUTE_ZOOM = 8;
+
+/**
+ * How much of the world must stay on screen, in map px, measured across the
+ * viewport's shorter side. 90 map px ≈ 20° of longitude: enough context that a
+ * close-up still reads as a place on Earth, and a guard against pixelated
+ * coastal fills on small heroes. Raise it to keep more context, lower it to
+ * push the focus further in.
+ */
+export const DEFAULT_MIN_VISIBLE_SPAN_PX = 90;
 
 /** How long the zoom to a route takes, in ms. */
 export const DEFAULT_ZOOM_DURATION_MS = 900;
 
 /**
- * Share of a re-route zoom spent pulling back to the world view; the rest
- * dives into the new route. Switching flights reads as "up, across, down"
- * rather than a single pan between two close-ups.
+ * Extra travel time for a multi-leg move (e.g. out to the world and back in):
+ * the same budget would otherwise make a longer journey feel rushed.
  */
-export const ZOOM_OUT_SHARE = 0.4;
+export const MULTI_LEG_DURATION_FACTOR = 1.5;
+
+/**
+ * Map px of panning that "costs" as much as one e-fold of zoom. Used to share
+ * a journey's time between its legs so no leg crawls or races.
+ */
+export const VIEW_PATH_PAN_UNIT = 420;
 
 /** Scale bounds, so degenerate containers can never produce a NaN transform. */
 export const VIEW_SCALE_LIMITS = { min: 0.02, max: 24 } as const;
@@ -98,6 +122,12 @@ export interface RouteFrameOptions {
    * screen, even when they are on opposite sides of the planet.
    */
   minScale?: number;
+  /**
+   * How much of the world must stay visible across the viewport's shorter
+   * side, in map px (default {@link DEFAULT_MIN_VISIBLE_SPAN_PX}). Caps the
+   * zoom-in for very short hops and small viewports.
+   */
+  minVisibleSpanPx?: number;
 }
 
 /** The bounding box of a set of map-px points. */
@@ -154,7 +184,12 @@ export function fitPointsView(
   const availableH = Math.max(1, vh - 2 * margin);
 
   const minScale = clampScale(finite(options.minScale, world.scale));
-  const maxScale = Math.max(minScale, finite(options.maxScale, DEFAULT_MAX_ROUTE_ZOOM));
+  const spanFloor = Math.max(1, finite(options.minVisibleSpanPx, DEFAULT_MIN_VISIBLE_SPAN_PX));
+  const spanCap = Math.min(vw, vh) / spanFloor;
+  const maxScale = Math.max(
+    minScale,
+    Math.min(finite(options.maxScale, DEFAULT_MAX_ROUTE_ZOOM), spanCap),
+  );
   const scale = clamp(Math.min(availableW / boxW, availableH / boxH), minScale, maxScale);
 
   // Centre on the box. The sea around the map is painted in the same colour as
@@ -178,12 +213,128 @@ export function lerpView(from: FlatView, to: FlatView, t: number): FlatView {
 }
 
 /**
+ * A camera blend the eye believes: the **scale is interpolated
+ * geometrically** (in log space), so the zoom feels like a constant rate
+ * instead of racing at the start and crawling at the end. The centre moves
+ * linearly.
+ *
+ * This is what every camera move uses — `t` is clamped to [0, 1].
+ */
+export function blendView(from: FlatView, to: FlatView, t: number): FlatView {
+  // Exact endpoints: exp(log()) can land a hair off, and keyframes are
+  // compared with `viewsEqual`, so the ends must be bit-exact.
+  if (!(t > 0)) return { ...from };
+  if (t >= 1) return { ...to };
+  const k = clamp(Number.isFinite(t) ? t : 0, 0, 1);
+  const fromScale = from.scale > 0 ? from.scale : 1e-6;
+  const toScale = to.scale > 0 ? to.scale : 1e-6;
+  const logScale = Math.log(fromScale) + (Math.log(toScale) - Math.log(fromScale)) * k;
+  return {
+    scale: Math.exp(logScale),
+    cx: from.cx + (to.cx - from.cx) * k,
+    cy: from.cy + (to.cy - from.cy) * k,
+  };
+}
+
+/** A camera route through one or more keyframes, ready to be played back. */
+export interface ViewPath {
+  /** The keyframes, in order (at least the start and the end). */
+  views: FlatView[];
+  /** Normalised cumulative positions (same length as `views`; the last is 1). */
+  stops: number[];
+}
+
+/**
+ * Builds a {@link ViewPath} through `views`.
+ *
+ * Each leg gets a share of the timeline proportional to how much camera work
+ * it needs — an e-fold of zoom and {@link VIEW_PATH_PAN_UNIT} map px of panning
+ * count as the same effort — so a long pull-back and a short nudge do not take
+ * the same time. Play it back with {@link pathProgress} + {@link viewAlongPath}.
+ */
+export function buildViewPath(views: readonly FlatView[], panUnit = VIEW_PATH_PAN_UNIT): ViewPath {
+  if (views.length === 0) return { views: [], stops: [] };
+  const pan = Math.max(1, finite(panUnit, VIEW_PATH_PAN_UNIT));
+  const cost: number[] = [0];
+  for (let i = 1; i < views.length; i++) {
+    const prev = views[i - 1]!;
+    const next = views[i]!;
+    const zoom = Math.abs(
+      Math.log((next.scale > 0 ? next.scale : 1e-6) / (prev.scale > 0 ? prev.scale : 1e-6)),
+    );
+    const panCost = Math.hypot(next.cx - prev.cx, next.cy - prev.cy) / pan;
+    cost.push(cost[i - 1]! + Math.max(1e-6, zoom + panCost));
+  }
+  const total = cost[cost.length - 1]!;
+  return {
+    views: views.map((view) => ({ ...view })),
+    stops: cost.map((value) => (total > 0 ? value / total : 0)),
+  };
+}
+
+/**
+ * The view at position `progress` (0..1) along a path — one leg at a time,
+ * blended perceptually (log zoom, linear pan). Values outside [0, 1] clamp to
+ * the ends.
+ *
+ * Playback should feed this {@link pathProgress}, not the raw clock: that is
+ * what gives the move its smooth arrival and departure at every keyframe.
+ */
+export function viewAlongPath(path: ViewPath, progress: number): FlatView {
+  const { views, stops } = path;
+  if (views.length === 0) return { scale: 1, cx: 0, cy: 0 };
+  if (views.length === 1) return { ...views[0]! };
+  const p = clamp(Number.isFinite(progress) ? progress : 0, 0, 1);
+  for (let i = 1; i < views.length; i++) {
+    const end = stops[i] ?? 1;
+    if (p <= end || i === views.length - 1) {
+      const start = stops[i - 1] ?? 0;
+      const span = Math.max(1e-9, end - start);
+      return blendView(views[i - 1]!, views[i]!, (p - start) / span);
+    }
+  }
+  return { ...views[views.length - 1]! };
+}
+
+/**
+ * Maps a uniform playback clock (0..1) onto a position along the path, easing
+ * **each leg** on its own.
+ *
+ * A re-route turns the camera around at the wide view (`route → world → new
+ * route`). Played at a constant rate — or with a single ease over the whole
+ * path, which is fastest in the middle — that U-turn happens at full speed and
+ * reads as a bounce. Easing leg by leg gives instead: a slow departure, a
+ * smooth pull-back that *settles* onto the wide view, then a smooth dive that
+ * accelerates and lands softly. Velocity is continuous throughout (it only
+ * reaches zero exactly on a keyframe, never for a stretch of frames), so there
+ * is no pause between the two halves — just one continuous arc.
+ */
+export function pathProgress(path: ViewPath, clock: number): number {
+  const { views, stops } = path;
+  if (views.length < 2) return 0;
+  const c = clamp(Number.isFinite(clock) ? clock : 0, 0, 1);
+  const last = views.length - 1;
+  for (let i = 1; i <= last; i++) {
+    const end = stops[i] ?? 1;
+    if (c <= end || i === last) {
+      const start = stops[i - 1] ?? 0;
+      const span = Math.max(1e-9, end - start);
+      const u = clamp((c - start) / span, 0, 1);
+      // Smoothstep: zero velocity at both ends of the leg, so the camera
+      // arrives at and leaves each keyframe with no velocity cliff.
+      return start + span * (u * u * (3 - 2 * u));
+    }
+  }
+  return 1;
+}
+
+/**
  * One frame of a zoom tween: the eased view between `from` and `to` at
  * `progress` 0..1. The easing is the same `easeInOutCubic` the plane uses, so
  * the camera and the aircraft feel like one product.
  */
 export function tweenView(from: FlatView, to: FlatView, progress: number): FlatView {
-  return lerpView(from, to, easeInOutCubic(progress));
+  return blendView(from, to, easeInOutCubic(progress));
 }
 
 /**
