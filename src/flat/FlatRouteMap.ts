@@ -44,8 +44,10 @@ import { flatArcGeometry, type FlatArcGeometry } from './routePath.js';
 import {
   DEFAULT_MAX_ROUTE_ZOOM,
   DEFAULT_ZOOM_DURATION_MS,
+  ZOOM_OUT_SHARE,
   fitPointsView,
   fitWorldView,
+  isWorldFraming,
   screenSpaceScale,
   tweenView,
   type FlatPoint,
@@ -450,22 +452,27 @@ export class FlatRouteMap {
   /**
    * Draws a route: zoom to it first, then paint it.
    *
-   * The camera eases from wherever it is (normally the world view) to a frame
-   * that holds both airports and the arc between them; the arcs, airport dots,
-   * city names and the plane only appear once that zoom has landed, so the
-   * route is "flown to" rather than stamped on a moving map. `zoomToRoute:
-   * false` (or `zoomDurationMs: 0`) draws immediately.
+   * From the world view the camera eases straight into a frame that holds both
+   * airports and the arc between them. When a route is **already on screen**
+   * (the visitor picked another destination) it first pulls back out to the
+   * whole world — the old route riding the zoom-out — and only then dives into
+   * the new pair, so a city change reads as a flight plan being redrawn rather
+   * than a pan between two close-ups. The arcs, airport dots, city names and
+   * plane appear once the dive has landed, so the route is "flown to" rather
+   * than stamped on a moving map. `zoomToRoute: false` (or `zoomDurationMs:
+   * 0`) draws immediately.
    */
   setRoute(origin: FlatRoutePoint, dest: FlatRoutePoint, options: FlatRouteOptions = {}): void {
+    const previousDrawn = this.routeDrawn;
     this.route = { from: origin, to: dest, roundTrip: options.roundTrip === true };
     this.tween = null;
-    this.clearRouteVisuals();
     const viewport = this.viewportSize();
     this.lastViewport = viewport;
     this.framed = true;
     // Not laid out yet (a hidden hero): draw now and frame on the first
     // resize once the host has a size.
     if (viewport.w < 2 || viewport.h < 2) {
+      this.clearRouteVisuals();
       this.drawRoute();
       return;
     }
@@ -474,9 +481,31 @@ export class FlatRouteMap {
     // view stays put and the route appears at once.
     const target = this.options.zoomToRoute === false ? null : this.routeView();
     if (!target) {
+      this.clearRouteVisuals();
       this.drawRoute();
       return;
     }
+
+    const world = this.worldView();
+    const duration = this.zoomDuration();
+    // A new flight chosen from an existing, zoomed-in one: pull back to the
+    // world first (keeping the old route on screen for the ride), then zoom
+    // into the new airports.
+    if (previousDrawn && duration > 0 && !isWorldFraming(this.view, world)) {
+      const outMs = Math.max(120, Math.round(duration * ZOOM_OUT_SHARE));
+      const inMs = Math.max(120, duration - outMs);
+      this.zoomTo(
+        world,
+        () => {
+          this.clearRouteVisuals();
+          this.zoomTo(target, () => this.drawRoute(), inMs);
+        },
+        outMs,
+      );
+      return;
+    }
+
+    this.clearRouteVisuals();
     this.zoomTo(target, () => this.drawRoute());
   }
 

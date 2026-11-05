@@ -53,6 +53,13 @@ export const DEFAULT_MAX_ROUTE_ZOOM = 2.2;
 /** How long the zoom to a route takes, in ms. */
 export const DEFAULT_ZOOM_DURATION_MS = 900;
 
+/**
+ * Share of a re-route zoom spent pulling back to the world view; the rest
+ * dives into the new route. Switching flights reads as "up, across, down"
+ * rather than a single pan between two close-ups.
+ */
+export const ZOOM_OUT_SHARE = 0.4;
+
 /** Scale bounds, so degenerate containers can never produce a NaN transform. */
 export const VIEW_SCALE_LIMITS = { min: 0.02, max: 24 } as const;
 
@@ -177,6 +184,21 @@ export function lerpView(from: FlatView, to: FlatView, t: number): FlatView {
  */
 export function tweenView(from: FlatView, to: FlatView, progress: number): FlatView {
   return lerpView(from, to, easeInOutCubic(progress));
+}
+
+/**
+ * True when a view is (practically) the world view — the whole planet, in
+ * frame. Used to decide whether a new route needs the "pull back to the world
+ * first" half of the zoom, or can simply dive into its own framing.
+ */
+export function isWorldFraming(view: FlatView, world: FlatView, tolerance = 0.02): boolean {
+  const scaleOk =
+    Number.isFinite(view.scale) &&
+    Math.abs(view.scale - world.scale) <= Math.max(world.scale, 1e-6) * tolerance;
+  // A few map px of drift are invisible at world scale; the world view is
+  // centred, so anything further away is a real pan.
+  const centreOk = Math.abs(view.cx - world.cx) <= 8 && Math.abs(view.cy - world.cy) <= 8;
+  return scaleOk && centreOk;
 }
 
 /** True when two views frame (practically) the same picture. */

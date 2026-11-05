@@ -291,6 +291,14 @@ holds **both airports and the arc between them**, and the route — arcs,
 airport dots, city names, plane — is drawn once the zoom has landed. Clearing
 the route eases back out to the world view.
 
+Changing the cities while a route is on screen is a **two-leg move**: the
+camera first pulls back out to the whole world (the old route stays on the map
+for the ride, then leaves as the map settles), then dives into the new pair
+and draws it. The same `zoomDurationMs` budget is split roughly 40 / 60
+between the two legs, so a new flight never looks like a pan between two
+close-ups. When the map is already at the world view (a first route, or after
+a clear), it simply dives in once.
+
 | Key              | Default | Description                                                             |
 | ---------------- | ------- | ----------------------------------------------------------------------- |
 | `zoomToRoute`    | `true`  | Fly to the route before drawing it. `false` draws it on the world view. |

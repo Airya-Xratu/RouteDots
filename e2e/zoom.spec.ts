@@ -191,3 +191,84 @@ test('frameRoute: false draws the route on the world view, without a zoom', asyn
   expect(result.view.cx).toBeCloseTo(before.cx, 6);
   expect(result.view.cy).toBeCloseTo(before.cy, 6);
 });
+
+test('changing the airports zooms out to the world, then into the new route', async ({ page }) => {
+  await page.goto(new URL('./fixtures/zoom.html', import.meta.url).href);
+  const state = await page.evaluate(() => (window as unknown as Hooks).__state);
+  expect(state.error, `fixture error: ${state.error}`).toBeNull();
+
+  // First flight: world view → LHR/DXB.
+  await page.evaluate(() => {
+    (window as unknown as Hooks).__rd.setRoute('LHR', 'DXB', { roundTrip: true });
+  });
+  await page.waitForFunction(() => (window as unknown as Hooks).__state.drawn === 1, undefined, {
+    timeout: 5000,
+  });
+  const world = await page.evaluate(() => {
+    const map = document.getElementById('map')!;
+    const view = (window as unknown as Hooks).__rd.getFlatMap()!.getViewState();
+    return { scale: view.scale, width: map.clientWidth, height: map.clientHeight };
+  });
+
+  // Second flight: the camera has to pull back out to the world before it
+  // dives into Singapore — sample the framing while it travels.
+  const samples = await page.evaluate(async () => {
+    const hooks = window as unknown as Hooks & { __samples: number[]; __drawn: number[] };
+    hooks.__samples = [];
+    hooks.__drawn = [];
+    const tick = () => {
+      const rd = hooks.__rd;
+      hooks.__samples.push(rd.getFlatMap()!.getViewState().scale);
+      hooks.__drawn.push(hooks.__state.drawn);
+      if (hooks.__state.drawn < 2) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    hooks.__rd.setRoute('LHR', 'SIN', { roundTrip: true });
+    await new Promise<void>((resolve) => {
+      const wait = () => (hooks.__state.drawn < 2 ? requestAnimationFrame(wait) : resolve());
+      wait();
+    });
+    return {
+      scales: hooks.__samples,
+      drawn: hooks.__drawn,
+      view: hooks.__rd.getFlatMap()!.getViewState(),
+      labels: Array.from(document.querySelectorAll('[data-rd-layer="routes"] text')).map(
+        (el) => el.textContent,
+      ),
+    };
+  });
+
+  expect(samples.scales.length).toBeGreaterThan(3);
+  const minScale = Math.min(...samples.scales);
+  // Pulled all the way back to the world view…
+  expect(minScale).toBeLessThan(world.scale * 1.05);
+  expect(minScale).toBeGreaterThan(world.scale * 0.9);
+  expect(Math.max(...samples.scales)).toBeGreaterThan(world.scale * 1.5);
+  // …with the old route still on screen for the ride out, and the new one
+  // only after the dive has landed.
+  expect(samples.drawn[0]).toBe(1);
+  expect(samples.labels).toEqual(['London', 'Singapore']);
+  expect(samples.view.scale).toBeGreaterThan(world.scale);
+});
+
+test('a route set while already at the world view dives in once, without a pull-back', async ({
+  page,
+}) => {
+  await page.goto(new URL('./fixtures/zoom.html', import.meta.url).href);
+  const result = await page.evaluate(async () => {
+    const hooks = window as unknown as Hooks & { __samples: number[] };
+    hooks.__samples = [];
+    const rd = hooks.__rd;
+    const tick = () => {
+      hooks.__samples.push(rd.getFlatMap()!.getViewState().scale);
+      if (hooks.__state.drawn < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    const before = rd.getFlatMap()!.getViewState().scale;
+    rd.setRoute('LHR', 'DXB', { roundTrip: true });
+    while (hooks.__state.drawn < 1) await new Promise((r) => setTimeout(r, 20));
+    return { before, scales: hooks.__samples };
+  });
+  // The camera never dips below where it started: a single zoom-in.
+  expect(Math.min(...result.scales)).toBeGreaterThanOrEqual(result.before - 1e-6);
+});

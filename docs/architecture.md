@@ -220,7 +220,10 @@ Two framings, both from pure maths in `flat/framing.ts`:
 
 `setRoute` starts a `tweenView` (900 ms, `easeInOutCubic`) from the current
 framing to the route framing; the arcs, airport dots, city names and plane are
-built only when that tween lands, and `clearRoute` eases back out. Screen-space
+built only when that tween lands, and `clearRoute` eases back out. Replacing an
+already-drawn route chains two tweens — out to the world view (old route still
+on screen), then in to the new pair — which keeps a destination change readable
+as "up, across, down". Screen-space
 overlay elements (city names, airport dots, plane) are counter-scaled by
 `screenSpaceScale(view.scale)`, and route/border strokes use
 `vector-effect: non-scaling-stroke`, so zooming does not inflate typography or

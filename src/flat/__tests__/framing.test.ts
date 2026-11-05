@@ -5,6 +5,7 @@ import {
   WORLD_VIEW_FILL,
   fitPointsView,
   fitWorldView,
+  isWorldFraming,
   lerpView,
   pointsBounds,
   screenSpaceScale,
@@ -165,6 +166,34 @@ describe('lerpView / tweenView', () => {
   it('is slower at the start than linear (eased intro)', () => {
     const quarter = tweenView(a, b, 0.25);
     expect(quarter.scale).toBeLessThan(1 + (3 - 1) * 0.25);
+  });
+});
+
+describe('isWorldFraming', () => {
+  const viewport = { w: 1200, h: 640 };
+  const world = fitWorldView(MAP, viewport);
+
+  it('accepts the world view itself', () => {
+    expect(isWorldFraming(world, world)).toBe(true);
+  });
+
+  it('accepts a hair of drift (sub-pixel at world scale)', () => {
+    expect(isWorldFraming({ ...world, cx: world.cx + 4, cy: world.cy - 3 }, world)).toBe(true);
+    expect(isWorldFraming({ ...world, scale: world.scale * 1.01 }, world)).toBe(true);
+  });
+
+  it('rejects a zoomed-in or panned view — those need the zoom-out leg', () => {
+    expect(isWorldFraming({ ...world, scale: world.scale * 2 }, world)).toBe(false);
+    expect(isWorldFraming({ ...world, cx: world.cx + 200 }, world)).toBe(false);
+    const route = fitPointsView(
+      [
+        { x: 799, y: 171 },
+        { x: 1046, y: 288 },
+      ],
+      MAP,
+      viewport,
+    )!;
+    expect(isWorldFraming(route, world)).toBe(false);
   });
 });
 
