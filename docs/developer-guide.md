@@ -59,28 +59,28 @@ Or import the ESM build from a CDN:
 
 ### `new RouteDots(container: HTMLElement, options?: RouteDotsOptions)`
 
-| Option        | Type                                         | Default                | Description                                                                           |
-| ------------- | -------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------- |
-| `theme`       | `'light' \| 'dark'`                          | `'light'`              | Base palette (ocean, countries, dots, arcs, cities, atmosphere).                      |
-| `colors`      | `RouteDotsColors`                            | —                      | Override any palette colour (see below); merges with the theme.                       |
-| `world`       | `'auto' \| 'globe' \| 'flat'`                | `'auto'`               | Renderer: `auto` = WebGL globe, flat map when WebGL is unavailable.                   |
-| `surface`     | `'countries' \| 'dots'`                      | `'countries'`          | Map surface: grey country fills with white borders, or the dot lattice.               |
-| `view`        | `{ lat, lng, altitude }`                     | `{ 30, 45, 1.9 }`      | Initial camera view (altitude = globe radii, 1.05–4).                                 |
-| `autoRotate`  | `{ enabled?, speed? }`                       | on, 0.4°/s             | Gentle idle rotation.                                                                 |
-| `interactive` | `boolean`                                    | `false`                | Allow pointer drag + wheel zoom (globe).                                              |
-| `texture`     | `{ stepDeg?, resDeg?, dotSizeDeg?, width? }` | 2 / auto / 0.62 / 2048 | Dot lattice & texture options.                                                        |
-| `borders`     | `{ enabled?, color?, opacity?, width? }`     | on, white, 1 / 1 px    | Country border lines. `opacity` = globe, `width` = flat-map stroke (px).              |
-| `hexTiles`    | `HexTilesOptions`                            | off — see below        | **Hexagon tiles** filling the country interiors (the `dots` surface's hex twin).      |
-| `route`       | `RouteStyleOptions`                          | see below              | Per-leg colour, opacity, lift, **curve angle**, width and **dash pattern**.           |
-| `cities`      | `CityMarkersOptions`                         | see below              | City markers: colour, period, dot size/dim, **ripple** size/thickness/growth/opacity. |
-| `labels`      | `CityLabelTextStyle`                         | see below              | City-name **text style** — font, size, weight, spacing, colours, halo.                |
-| `airports`    | `AirportsStyleOptions`                       | see below              | **Source / destination** endpoint dots + pulse rings, per endpoint.                   |
-| `plane`       | `PlaneLayerOptions & { enabled? }`           | on                     | Animated plane — **icon component**, size, colour, timing (see below).                |
-| `camera3d`    | `FlatCamera3DOptions`                        | off                    | The flat world's **3D camera effect** (perspective, tilt, yaw, depth, orbit).         |
-| `frameRoute`  | `boolean`                                    | `true`                 | Pan/zoom the camera to frame each new route.                                          |
-| `fallback`    | `{ enabled? }`                               | `true`                 | Use the flat map when WebGL is unavailable.                                           |
-| `flat`        | `FlatRouteMapOptions`                        | —                      | Options for the flat world (surface, plane, camera3d, width…).                        |
-| `land`        | `TopoLand`                                   | bundled 110m mask      | Replace the land mask.                                                                |
+| Option        | Type                                         | Default                | Description                                                                             |
+| ------------- | -------------------------------------------- | ---------------------- | --------------------------------------------------------------------------------------- |
+| `theme`       | `'light' \| 'dark'`                          | `'light'`              | Base palette (ocean, countries, dots, arcs, cities, atmosphere).                        |
+| `colors`      | `RouteDotsColors`                            | —                      | Override any palette colour (see below); merges with the theme.                         |
+| `world`       | `'auto' \| 'globe' \| 'flat'`                | `'auto'`               | Renderer: `auto` = WebGL globe, flat map when WebGL is unavailable.                     |
+| `surface`     | `'countries' \| 'dots'`                      | `'countries'`          | Map surface: grey country fills with white borders, or the dot lattice.                 |
+| `view`        | `{ lat, lng, altitude }`                     | `{ 30, 45, 1.9 }`      | Initial camera view (altitude = globe radii, 1.05–4).                                   |
+| `autoRotate`  | `{ enabled?, speed? }`                       | on, 0.4°/s             | Gentle idle rotation.                                                                   |
+| `interactive` | `boolean`                                    | `false`                | Allow pointer drag + wheel zoom (globe).                                                |
+| `texture`     | `{ stepDeg?, resDeg?, dotSizeDeg?, width? }` | 2 / auto / 0.62 / 2048 | Dot lattice & texture options.                                                          |
+| `borders`     | `{ enabled?, color?, opacity?, width? }`     | on, white, 1 / 1 px    | Country border lines. `opacity` = globe, `width` = flat-map stroke (px).                |
+| `hexTiles`    | `HexTilesOptions`                            | off — see below        | **Hexagon tiles** filling the country interiors (the `dots` surface's hex twin).        |
+| `route`       | `RouteStyleOptions`                          | see below              | Per-leg colour, opacity, lift, **curve angle**, width and **dash pattern**.             |
+| `cities`      | `CityMarkersOptions`                         | see below              | City markers: colour, period, dot size/dim, **ripple** size/thickness/growth/opacity.   |
+| `labels`      | `CityLabelTextStyle`                         | see below              | City-name **text style** — font, size, weight, spacing, colours, halo.                  |
+| `airports`    | `AirportsStyleOptions`                       | see below              | **Source / destination** endpoint dots + pulse rings, per endpoint.                     |
+| `plane`       | `PlaneLayerOptions & { enabled? }`           | on                     | Animated plane — **icon component**, size, colour, timing (see below).                  |
+| `camera3d`    | `FlatCamera3DOptions`                        | off                    | The flat world's **3D camera effect** (perspective, tilt, yaw, depth, orbit).           |
+| `frameRoute`  | `boolean`                                    | `true`                 | Pan/zoom the camera to frame each new route. Flat: **zoom to the route, then draw it**. |
+| `fallback`    | `{ enabled? }`                               | `true`                 | Use the flat map when WebGL is unavailable.                                             |
+| `flat`        | `FlatRouteMapOptions`                        | —                      | Options for the flat world (surface, plane, camera3d, **zoom**, width…).                |
+| `land`        | `TopoLand`                                   | bundled 110m mask      | Replace the land mask.                                                                  |
 
 #### Colour palette
 
@@ -206,16 +206,17 @@ flat world scales the same numbers into px.
 Text style of the city names at the route ends — the globe's pin badges and
 the flat map's haloed labels share one option:
 
-| Key             | Default                 | Description                                                        |
-| --------------- | ----------------------- | ------------------------------------------------------------------ |
-| `color`         | theme `label`           | Text colour.                                                       |
-| `background`    | theme `labelBackground` | Badge pill behind the text (globe); `false` removes pill + shadow. |
-| `fontFamily`    | system UI stack         | CSS `font-family` list.                                            |
-| `fontSize`      | `12`                    | Font size in px (the flat map scales it ×2 into its map space).    |
-| `fontWeight`    | `600`                   | CSS `font-weight`.                                                 |
-| `letterSpacing` | `0.01em`                | CSS `letter-spacing`.                                              |
-| `halo`          | theme `ocean`           | Flat-map halo behind the glyphs; `false` disables it.              |
-| `haloWidth`     | `6`                     | Flat-map halo width (map px).                                      |
+| Key             | Default                 | Description                                                                                                               |
+| --------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `color`         | theme `label`           | Text colour.                                                                                                              |
+| `background`    | theme `labelBackground` | Badge pill behind the text (globe); `false` removes pill + shadow.                                                        |
+| `fontFamily`    | system UI stack         | CSS `font-family` list.                                                                                                   |
+| `fontSize`      | `12`                    | Font size in **px on screen** — the flat map counter-scales it by the zoom, so the names keep this size at every framing. |
+| `scaleWithZoom` | `false`                 | Flat map: let the names zoom with the map instead (default keeps them screen-sized).                                      |
+| `fontWeight`    | `600`                   | CSS `font-weight`.                                                                                                        |
+| `letterSpacing` | `0.01em`                | CSS `letter-spacing`.                                                                                                     |
+| `halo`          | theme `ocean`           | Flat-map halo behind the glyphs; `false` disables it.                                                                     |
+| `haloWidth`     | `6`                     | Flat-map halo width (map px).                                                                                             |
 
 ```ts
 new RouteDots(el, {
@@ -281,6 +282,41 @@ const icon = PlaneIcon.from({ image: planePng, size: 64 });
 icon.toDataUrl(64); // or .toSVG() / .toCanvas(64)
 ```
 
+#### Flat world framing & route zoom (`flat.zoomToRoute`, `flat.zoomDurationMs`, `flat.maxRouteZoom`)
+
+The flat map opens on **the whole world**: the map is letterboxed into the
+container (aspect preserved, never cropped), painted in the configured style.
+When a route is set, the camera eases from that world view to a frame that
+holds **both airports and the arc between them**, and the route — arcs,
+airport dots, city names, plane — is drawn once the zoom has landed. Clearing
+the route eases back out to the world view.
+
+| Key              | Default | Description                                                             |
+| ---------------- | ------- | ----------------------------------------------------------------------- |
+| `zoomToRoute`    | `true`  | Fly to the route before drawing it. `false` draws it on the world view. |
+| `zoomDurationMs` | `900`   | How long the zoom takes, in ms (`0` = instantly).                       |
+| `maxRouteZoom`   | `2.2`   | Zoom-in cap: a short hop is framed, not magnified into a microscope.    |
+
+The framing never zooms _out_ past the world view, so even an antipodal route
+keeps both airports on screen, and it keeps a screen-space margin around the
+route for the airport dots and the city names. `frameRoute: false` on
+`RouteDots` turns the whole thing off (both worlds); an OS-level
+`prefers-reduced-motion` is honoured as well.
+
+```ts
+new RouteDots(el, {
+  world: 'flat',
+  flat: { zoomToRoute: true, zoomDurationMs: 1200, maxRouteZoom: 2.6 },
+  labels: { fontSize: 14 }, // 14 px, zoom or no zoom
+});
+// rd.on('route:drawn', …) fires when the zoom has landed and the route is up.
+```
+
+The screen-space rule applies to the route overlay too: the airport dots, the
+city names and the plane keep their configured px size, and the arcs + borders
+use `vector-effect: non-scaling-stroke`, so zooming never produces a 10 px
+hairline or a billboard-sized label.
+
 #### Flat 3D camera (`camera3d`)
 
 `{ enabled?, perspective?, tilt?, yaw?, depth?, interactive?, follow? }` —
@@ -293,29 +329,29 @@ true) eases the framing so the plane cannot leave the viewport.
 
 ### Methods
 
-| Method                                        | Description                                                                                                                                  |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `setRoute(from, to, { roundTrip? }): boolean` | Draws the route (arc(s) + markers + pulse + plane), pans the camera to frame it.                                                             |
-| `getRoute(): RouteDotsRouteInfo \| null`      | Resolved `{ from, to, roundTrip }` of the current route.                                                                                     |
-| `clearRoute()`                                | Removes arcs/markers/pulses/plane.                                                                                                           |
-| `getCameraState(): ViewState \| null`         | Current camera `{ lat, lng, altitude }` (WebGL mode; `null` in flat mode).                                                                   |
-| `setView(view, durationMs?)`                  | Animates the camera to a view (WebGL mode; no-op in flat mode). Overrides tracking while it runs.                                            |
-| `setColors(colors)`                           | Merges colour overrides and restyles the live scene.                                                                                         |
-| `resetColors()`                               | Drops every colour override (back to the theme).                                                                                             |
-| `setOptions(options)`                         | Merges and applies options live (route style, dashes, angles, cities, plane, camera3d…); remounts only when the world/surface/theme changes. |
-| `replaceOptions(options)`                     | Replaces the option set (omitted keys return to defaults) and remounts, keeping the route.                                                   |
-| `applyConfig(json)`                           | Applies a portable config document. A versioned document replaces; a bare options object merges. Returns warnings.                           |
-| `exportConfig({ name? })`                     | The live scene as a portable config (`toConfigJSON()` is the same document, pretty-printed).                                                 |
-| `setWorld('auto' \| 'globe' \| 'flat')`       | Switches renderer, keeping the route.                                                                                                        |
-| `setTheme('light' \| 'dark')`                 | Switches theme at runtime (re-renders the current route).                                                                                    |
-| `getOptions()`                                | Deep copy of the merged options in use.                                                                                                      |
-| `getRouteStyle()`                             | Resolved styles (colour, lift, **angle**, width, dash) per leg; `null` before mount.                                                         |
-| `getCityStyle()`                              | Resolved city dot + ripple numbers; `null` before mount.                                                                                     |
-| `getCamera3D()`                               | Resolved flat-world 3D camera (flat mode only).                                                                                              |
-| `getFlatMap()`                                | The `FlatRouteMap` instance (flat mode only).                                                                                                |
-| `getCityMarkers()`                            | The WebGL city-marker layer (globe mode only).                                                                                               |
-| `resize()`                                    | Re-fits the renderer to the container (also handled automatically via `ResizeObserver`).                                                     |
-| `dispose()`                                   | Tears everything down (RAF, listeners, GPU resources, DOM).                                                                                  |
+| Method                                        | Description                                                                                                                                               |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `setRoute(from, to, { roundTrip? }): boolean` | Draws the route (arc(s) + markers + pulse + plane), pans the camera to frame it. The flat world zooms first and emits `route:drawn` when the route lands. |
+| `getRoute(): RouteDotsRouteInfo \| null`      | Resolved `{ from, to, roundTrip }` of the current route.                                                                                                  |
+| `clearRoute()`                                | Removes arcs/markers/pulses/plane; the flat world eases back to the whole world.                                                                          |
+| `getCameraState(): ViewState \| null`         | Current camera `{ lat, lng, altitude }` (WebGL mode; `null` in flat mode).                                                                                |
+| `setView(view, durationMs?)`                  | Animates the camera to a view (WebGL mode; no-op in flat mode). Overrides tracking while it runs.                                                         |
+| `setColors(colors)`                           | Merges colour overrides and restyles the live scene.                                                                                                      |
+| `resetColors()`                               | Drops every colour override (back to the theme).                                                                                                          |
+| `setOptions(options)`                         | Merges and applies options live (route style, dashes, angles, cities, plane, camera3d…); remounts only when the world/surface/theme changes.              |
+| `replaceOptions(options)`                     | Replaces the option set (omitted keys return to defaults) and remounts, keeping the route.                                                                |
+| `applyConfig(json)`                           | Applies a portable config document. A versioned document replaces; a bare options object merges. Returns warnings.                                        |
+| `exportConfig({ name? })`                     | The live scene as a portable config (`toConfigJSON()` is the same document, pretty-printed).                                                              |
+| `setWorld('auto' \| 'globe' \| 'flat')`       | Switches renderer, keeping the route.                                                                                                                     |
+| `setTheme('light' \| 'dark')`                 | Switches theme at runtime (re-renders the current route).                                                                                                 |
+| `getOptions()`                                | Deep copy of the merged options in use.                                                                                                                   |
+| `getRouteStyle()`                             | Resolved styles (colour, lift, **angle**, width, dash) per leg; `null` before mount.                                                                      |
+| `getCityStyle()`                              | Resolved city dot + ripple numbers; `null` before mount.                                                                                                  |
+| `getCamera3D()`                               | Resolved flat-world 3D camera (flat mode only).                                                                                                           |
+| `getFlatMap()`                                | The `FlatRouteMap` instance (flat mode only).                                                                                                             |
+| `getCityMarkers()`                            | The WebGL city-marker layer (globe mode only).                                                                                                            |
+| `resize()`                                    | Re-fits the renderer to the container (also handled automatically via `ResizeObserver`).                                                                  |
+| `dispose()`                                   | Tears everything down (RAF, listeners, GPU resources, DOM).                                                                                               |
 
 ### Events
 
@@ -613,9 +649,13 @@ changes, `dispose()` on unmount.
 - **Flat world.** Without WebGL (or with `world: 'flat'`) `FlatRouteMap`
   renders an equirectangular map with curved SVG routes (outbound up, return
   down), a plane flying the outbound path and the same city ripple as CSS
-  keyframes — the public API is unchanged. With `camera3d.enabled` the same map
-  becomes a 3D scene (perspective + tilt/yaw + depth layers), so "flat world"
-  and "3D camera" are independent choices.
+  keyframes — the public API is unchanged. The map rests on a **world view**
+  (the whole planet, letterboxed) and, when a route arrives, **eases to a frame
+  around it before drawing** (`flat.zoomToRoute`, 900 ms default, zoom capped),
+  then eases back out on `clearRoute`. Pure framing maths lives in
+  `flat/framing.ts`. With `camera3d.enabled` the same map becomes a 3D scene
+  (perspective + tilt/yaw + depth layers), so "flat world" and "3D camera" are
+  independent choices.
 - **Endpoint pins.** In WebGL mode each endpoint gets a DOM pin badge
   (pill + stem + dot, `.rd-pin-*` classes) that is re-projected every frame
   and fades out when it rotates to the far hemisphere. In flat mode the city

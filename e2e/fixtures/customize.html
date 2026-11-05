@@ -34,6 +34,8 @@
         // A fully customised flat world (forced, with the 3D camera effect).
         const flat = new RouteDots(document.getElementById('flat'), {
           world: 'flat',
+          // Frame the route immediately: the tests read the DOM right away.
+          flat: { zoomToRoute: true, zoomDurationMs: 0 },
           colors: {
             ocean: '#0b1220',
             countries: '#1b2a3a',

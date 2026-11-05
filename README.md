@@ -49,14 +49,24 @@ and a flat 2D fallback for browsers without WebGL.
   apart as you like). City names are typeset with the `labels`
   text style (font, size, weight, spacing, colours, halo), and the **source
   and destination airports** can be styled independently (`airports`: dot
-  colour / size, pulse ring, per endpoint). Call `rd.setOptions()` /
-  `rd.setColors()` to restyle a live scene without restarting the animation.
-  The showcase studio exports that whole scene as JSON —
-  `RouteDots.fromConfig(el, config)` loads it in your project.
+  colour / size, pulse ring, per endpoint). City names are **screen-sized**:
+  `labels.fontSize` is the size you get on screen, whether the map shows the
+  whole planet or one continent (`labels.scaleWithZoom` opts out). Call
+  `rd.setOptions()` / `rd.setColors()` to restyle a live scene without
+  restarting the animation. The showcase studio exports that whole scene as
+  JSON — `RouteDots.fromConfig(el, config)` loads it in your project.
 - 🌐 **3D globe or flat map — your call.** `world: 'auto' | 'globe' | 'flat'`
   picks the renderer, and the flat map can itself be a 3D scene
   (`camera3d`): CSS perspective, drag-to-orbit, wheel zoom and depth layers
   that float the routes and the plane above the geography.
+- 🗺️ **The flat map opens wide, then flies to the route.** At rest it shows the
+  **whole world**, letterboxed in your palette — filled countries, hairline
+  borders, no crop. Pick a flight and it **zooms to it with a smooth ease**,
+  far enough that both airports and the arc between them are in view, and only
+  then draws the route; clearing it zooms back out. The framing is pure maths
+  (`flat/framing.ts`), never zooms further out than the whole world, and is
+  tunable with `flat.zoomToRoute` / `zoomDurationMs` / `maxRouteZoom`
+  (`frameRoute: false` switches it off).
 - 🧯 **Graceful degradation.** Without WebGL you get the same flat map in 2D
   with curved SVG routes and an animated plane. Same API, no breakage.
 

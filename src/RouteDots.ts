@@ -119,7 +119,12 @@ export interface RouteDotsOptions {
   airports?: AirportsStyleOptions;
   /** 3D camera effect for the flat world (perspective, tilt, depth, orbit). */
   camera3d?: FlatCamera3DOptions;
-  /** Camera pan/zoom when a route is set (default true). */
+  /**
+   * Camera pan/zoom when a route is set (default true). The 3D world pans
+   * across the sphere; the flat world opens on the whole planet and **zooms
+   * to the two airports before drawing the route** (tune that with
+   * `flat.zoomToRoute` / `flat.zoomDurationMs` / `flat.maxRouteZoom`).
+   */
   frameRoute?: boolean;
   /** Enable the flat world fallback (default true). */
   fallback?: { enabled?: boolean };
@@ -323,7 +328,8 @@ export class RouteDots {
       const spec = this.layer.setRoute(a, b, roundTrip);
       if (this.plane && this.options.plane?.enabled !== false) {
         const arc = spec.arcs[0]!;
-        const style = arc.id === 'return' ? this.layer.resolvedStyle.return : this.layer.resolvedStyle.outbound;
+        const style =
+          arc.id === 'return' ? this.layer.resolvedStyle.return : this.layer.resolvedStyle.outbound;
         this.plane.setArc(
           arc.from,
           arc.to,
@@ -719,6 +725,9 @@ export class RouteDots {
           color: o.plane?.color ?? o.flat?.plane?.color ?? palette.plane,
         },
         camera3d: { ...o.flat?.camera3d, ...o.camera3d },
+        zoomToRoute: this.wantsRouteZoom(),
+        zoomDurationMs: o.flat?.zoomDurationMs,
+        maxRouteZoom: o.flat?.maxRouteZoom,
       });
     }
   }
@@ -926,11 +935,25 @@ export class RouteDots {
               width: o.borders.width,
             },
       hexTiles: o.hexTiles,
+      zoomToRoute: this.wantsRouteZoom(),
+      zoomDurationMs: o.flat?.zoomDurationMs,
+      maxRouteZoom: o.flat?.maxRouteZoom,
     };
     this.flat = new FlatRouteMap(this.container, flatOptions);
+    this.flat.onDrawn = () => this.emit('route:drawn', this.getRoute());
     this.palette = this.flat.activePalette;
     this.lastHexTiles = JSON.stringify(this.options.hexTiles ?? null);
     this._mode = 'flat';
+  }
+
+  /**
+   * Whether the camera should fly to a route before drawing it: the shared
+   * `frameRoute` switch, with the flat world's own `flat.zoomToRoute` able to
+   * turn it off (but never on when `frameRoute` is off).
+   */
+  private wantsRouteZoom(): boolean {
+    if (this.options.frameRoute === false) return false;
+    return this.options.flat?.zoomToRoute !== false;
   }
 
   private unmountFlat(): void {

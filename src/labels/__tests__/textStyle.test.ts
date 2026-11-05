@@ -3,7 +3,9 @@ import { PALETTES } from '../../theme.js';
 import {
   DEFAULT_LABEL_FONT_FAMILY,
   DEFAULT_LABEL_FONT_SIZE,
+  FLAT_LABEL_OFFSET_PX,
   FLAT_LABEL_SCALE,
+  flatLabelPlacement,
   pinLabelCssVars,
   resolveCityLabelStyle,
   svgLabelAttrs,
@@ -64,6 +66,11 @@ describe('resolveCityLabelStyle — overrides', () => {
     expect(style.halo).toBeNull();
   });
 
+  it('defaults to screen-space labels and honors scaleWithZoom', () => {
+    expect(resolveCityLabelStyle(palette).scaleWithZoom).toBe(false);
+    expect(resolveCityLabelStyle(palette, { scaleWithZoom: true }).scaleWithZoom).toBe(true);
+  });
+
   it('ignores junk values instead of throwing', () => {
     const style = resolveCityLabelStyle(palette, {
       fontSize: Number.NaN,
@@ -109,5 +116,35 @@ describe('svgLabelAttrs (flat labels)', () => {
     const attrs = svgLabelAttrs(resolveCityLabelStyle(palette, { halo: false }));
     expect(attrs.stroke).toBe('none');
     expect(attrs['stroke-width']).toBe('0');
+  });
+});
+
+describe('flatLabelPlacement (city names survive the zoom)', () => {
+  it('keeps the configured font size on screen at every zoom level', () => {
+    const anchor = { x: 800, y: 400 };
+    for (const viewScale of [0.5, 1, 2.2]) {
+      const placement = flatLabelPlacement(anchor, viewScale);
+      // screen px = font-size attr × placement.scale × viewScale
+      const onScreen = 12 * FLAT_LABEL_SCALE * placement.scale * viewScale;
+      expect(onScreen).toBeCloseTo(12, 9);
+      // The gap to the dot is a constant number of screen px, too.
+      expect((placement.x - anchor.x) * viewScale).toBeCloseTo(FLAT_LABEL_OFFSET_PX, 9);
+      expect((anchor.y - placement.y) * viewScale).toBeCloseTo(FLAT_LABEL_OFFSET_PX, 9);
+    }
+  });
+
+  it('scales with the map when asked, like the geography', () => {
+    const anchor = { x: 800, y: 400 };
+    const placement = flatLabelPlacement(anchor, 2, { scaleWithZoom: true });
+    expect(placement.scale).toBe(1);
+    expect(placement.x).toBe(anchor.x + FLAT_LABEL_OFFSET_PX);
+    expect(placement.y).toBe(anchor.y - FLAT_LABEL_OFFSET_PX);
+  });
+
+  it('never divides by zero', () => {
+    const placement = flatLabelPlacement({ x: 0, y: 0 }, 0);
+    expect(Number.isFinite(placement.x)).toBe(true);
+    expect(Number.isFinite(placement.scale)).toBe(true);
+    expect(placement.scale).toBe(1 / FLAT_LABEL_SCALE);
   });
 });

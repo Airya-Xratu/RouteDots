@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The flat world opens on the whole planet, then flies to the route.** The
+  flat map used to sit at 1:1 in a stage bigger than its container, so a hero
+  showed a cropped corner of the world; it now frames the **whole world**,
+  letterboxed and centred (aspect preserved, margins painted in the ocean
+  colour), in whatever style the config chose. `setRoute` eases the camera
+  from that world view to a frame that holds **both airports and the arc
+  between them** (`fitPointsView`: screen-space margin, capped zoom-in, never
+  zoomed out past the whole world), and only **after the zoom lands** are the
+  arcs, airport dots, city names and plane drawn — `rd.on('route:drawn')` now
+  fires in flat mode too. `clearRoute` eases back out to the world view. Tune
+  it with `flat.zoomToRoute` (default `true`), `flat.zoomDurationMs` (900) and
+  `flat.maxRouteZoom` (2.2); `frameRoute: false` disables it, and an OS-level
+  `prefers-reduced-motion` draws instantly. The framing maths is pure and
+  unit-tested in `src/flat/framing.ts`.
+- **City-name text size is a screen size.** `labels.fontSize` is now the size
+  the visitor sees: the flat map counter-scales the names by its own zoom, so
+  a route zoomed to 2.2× does not blow the city name up to billboard size
+  (`labels.scaleWithZoom: true` restores the map-space behaviour). Airport
+  dots and the plane follow the same rule, and route + border strokes use
+  `vector-effect: non-scaling-stroke`, so a zoomed flat map keeps hairline
+  borders and px-wide routes. The showcase's **City labels** panel grew a
+  "Scale with map zoom" switch, and the studio's **World** panel controls the
+  route zoom (on/off, duration).
 - **Hexagon tiles inside countries (`hexTiles`)** — the `countries` surface can
   fill every country interior with a hex tile grid, the hex twin of the `dots`
   surface's dot lattice. `spacingDeg` (grid pitch), `sizeDeg` (tile

@@ -77,6 +77,8 @@ const scene = {
       background: false,
       halo: false,
       fontFamily: 'ui-monospace, monospace',
+      // Flat map: the city names grow with the zoom.
+      scaleWithZoom: true,
     },
     airports: {
       size: 6,
@@ -86,6 +88,7 @@ const scene = {
     },
     camera3d: { enabled: true, tilt: 40, yaw: -12, depth: 90, perspective: 900, follow: true },
     fallback: { enabled: true },
+    flat: { zoomToRoute: true, zoomDurationMs: 600, maxRouteZoom: 2 },
   },
 } as const;
 

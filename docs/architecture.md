@@ -53,6 +53,7 @@ src/
 │   ├── layers.ts             Layer names/attributes of the flat DOM stack
 │   ├── countryPaths.ts       Country polygons → SVG path data (pure)
 │   ├── routePath.ts          Quadratic arcs + framing bounds — pure
+│   ├── framing.ts            World view + route framing + view tweens — pure
 │   ├── camera3d.ts           3D camera maths: transforms, zoom, follow — pure
 │   └── FlatRouteMap.ts       Flat world (canvas fills + SVG routes + 3D camera)
 └── data/
@@ -205,9 +206,25 @@ instead of hard-clipping at the silhouette.
 lattice (equirectangular), an SVG overlay (two quadratic-Bézier dashed routes
 — outbound up, return down — plus endpoint markers, labels and the plane), and
 a plane moved along `getPointAtLength`. A stage div with an explicit pixel size
-keeps canvas, SVG-viewBox and framing math in one coordinate space;
-`frameRoute` pans/zooms it (CSS transform, 700 ms ease-out) to centre the
-route.
+keeps canvas, SVG-viewBox and framing math in one coordinate space.
+
+Two framings, both from pure maths in `flat/framing.ts`:
+
+- **World view** — `fitWorldView` contains the whole map in the container
+  (letterboxed, aspect preserved, centred). This is the resting state: a
+  visitor sees the entire styled planet before choosing a flight.
+- **Route view** — `fitPointsView` fits the two airports plus the arc's control
+  point with a screen-space margin, clamped between the world-view scale (never
+  zoom out past the whole world) and `maxRouteZoom` (never magnify a short hop
+  into a microscope).
+
+`setRoute` starts a `tweenView` (900 ms, `easeInOutCubic`) from the current
+framing to the route framing; the arcs, airport dots, city names and plane are
+built only when that tween lands, and `clearRoute` eases back out. Screen-space
+overlay elements (city names, airport dots, plane) are counter-scaled by
+`screenSpaceScale(view.scale)`, and route/border strokes use
+`vector-effect: non-scaling-stroke`, so zooming does not inflate typography or
+hairlines.
 
 The DOM is a four-level chain — container → viewport → world → stage — so the
 **3D camera effect** (`camera3d`) is a pure styling concern: the container gets

@@ -57,9 +57,11 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // Landing on the bare root? Send visitors straight to the showcase.
+  // Landing on the bare root? Send visitors straight to the showcase, keeping
+  // any query string (`/?world=flat` opens the demo in the flat world).
   if (urlPath === '/') {
-    res.writeHead(302, { Location: '/examples/showcase/' });
+    const query = new URL(req.url ?? '/', 'http://localhost').search;
+    res.writeHead(302, { Location: `/examples/showcase/${query}` });
     res.end();
     return;
   }
