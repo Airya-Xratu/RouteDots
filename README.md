@@ -68,8 +68,15 @@ and a flat 2D fallback for browsers without WebGL.
   first, then dives into the new pair** in one continuous, eased move (the old
   route rides the zoom-out); clearing it zooms back out too. The framing is pure maths
   (`flat/framing.ts`), never zooms further out than the whole world, and is
-  tunable with `flat.zoomToRoute` / `zoomDurationMs` / `maxRouteZoom`
-  (`frameRoute: false` switches it off).
+  then draws the route — close city pairs get a much tighter close-up than
+  long hauls. Change the cities and it **pulls back out to the whole world
+  first, then dives into the new pair** in one continuous, eased move (the old
+  route rides the zoom-out); clearing it zooms back out too. The framing is pure maths
+  (`flat/framing.ts`) and every move is bounded by a configurable zoom window:
+  `flat.minRouteZoom` / `flat.maxRouteZoom` (multiples of the world view, `1` and
+  `4` by default), alongside `flat.zoomToRoute` / `zoomDurationMs`
+  (`frameRoute: false` switches it off). Both limits are sliders in the showcase
+  studio.
 - 🧯 **Graceful degradation.** Without WebGL you get the same flat map in 2D
   with curved SVG routes and an animated plane. Same API, no breakage.
 

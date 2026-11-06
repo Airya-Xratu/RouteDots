@@ -43,6 +43,7 @@ import { flatCountryPaths } from './countryPaths.js';
 import { flatArcGeometry, type FlatArcGeometry } from './routePath.js';
 import {
   DEFAULT_MAX_ROUTE_ZOOM,
+  DEFAULT_MIN_ROUTE_ZOOM,
   DEFAULT_ZOOM_DURATION_MS,
   MULTI_LEG_DURATION_FACTOR,
   buildViewPath,
@@ -179,8 +180,19 @@ export interface FlatRouteMapOptions {
   zoomToRoute?: boolean;
   /** How long the zoom takes, in ms (default 900; `0` draws instantly). */
   zoomDurationMs?: number;
-  /** Maximum zoom-in when framing a route (default 2.2). */
+  /**
+   * Tightest the camera may get when framing a route, **as a multiple of the
+   * whole-world view** (default `4`). A close city pair is framed by its own
+   * fit, never further in than this.
+   */
   maxRouteZoom?: number;
+  /**
+   * Loosest the camera may get when framing a route, as a multiple of the
+   * whole-world view (default `1` — the world view itself, so both airports
+   * always fit). Below `1` allows a little sea around the map; above `1` keeps
+   * the frame tighter than the world (very long routes may then be cropped).
+   */
+  minRouteZoom?: number;
 }
 
 interface FlatRouteOptions {
@@ -714,9 +726,15 @@ export class FlatRouteMap {
       x,
       y,
     }));
+    // The configured limits are multiples of the world view, so they mean the
+    // same thing on a phone and on a full-bleed hero.
+    const worldScale = this.worldView().scale;
+    const floor = worldScale * Math.max(0.05, this.options.minRouteZoom ?? DEFAULT_MIN_ROUTE_ZOOM);
+    const ceiling =
+      worldScale * Math.max(0.05, this.options.maxRouteZoom ?? DEFAULT_MAX_ROUTE_ZOOM);
     return fitPointsView(points, this.mapSize(), this.viewportSize(), {
-      maxScale: this.options.maxRouteZoom ?? DEFAULT_MAX_ROUTE_ZOOM,
-      minScale: this.worldView().scale,
+      minScale: floor,
+      maxScale: Math.max(floor, ceiling),
     });
   }
 

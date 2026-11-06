@@ -282,7 +282,7 @@ const icon = PlaneIcon.from({ image: planePng, size: 64 });
 icon.toDataUrl(64); // or .toSVG() / .toCanvas(64)
 ```
 
-#### Flat world framing & route zoom (`flat.zoomToRoute`, `flat.zoomDurationMs`, `flat.maxRouteZoom`)
+#### Flat world framing & route zoom (`flat.zoomToRoute`, `flat.zoomDurationMs`, `flat.minRouteZoom`, `flat.maxRouteZoom`)
 
 The flat map opens on **the whole world**: the map is letterboxed into the
 container (aspect preserved, never cropped), painted in the configured style.
@@ -302,30 +302,52 @@ multi-leg move gets a longer budget (`1.5 × zoomDurationMs`, capped at 12 s) so
 it does not feel rushed. When the map is already at the world view (a first
 route, or after a clear), it simply dives in once.
 
+The route zoom is bounded by **two configurable limits**, both expressed as
+**multiples of the whole-world view** — so they mean the same thing on a phone
+and on a full-bleed hero:
+
 | Key              | Default | Description                                                             |
 | ---------------- | ------- | ----------------------------------------------------------------------- |
 | `zoomToRoute`    | `true`  | Fly to the route before drawing it. `false` draws it on the world view. |
 | `zoomDurationMs` | `900`   | How long the zoom takes, in ms (`0` = instantly).                       |
-| `maxRouteZoom`   | `8`     | Zoom-in ceiling — reachable only by very close city pairs.              |
+| `minRouteZoom`   | `1`     | Zoom **floor** — `1` is the world view, so both airports always fit.    |
+| `maxRouteZoom`   | `4`     | Zoom **ceiling** — how close a short hop is allowed to get.             |
 
-The zoom is also limited by **context**: `fitPointsView` never lets the frame
-show less than ~90 map px of the world (its shorter side), so two nearby
-airports get a real close-up — London/Paris lands at ~8× on a 1280 × 800 hero,
-where the old 2.2× cap left them as two specks — while still keeping a slice of
-geography around the cities on screen. The framing never zooms _out_ past the
-world view, so even an antipodal route keeps both airports on screen, and it
-keeps a screen-space margin around the route for the airport dots and the city
-names. Zoom itself is interpolated in log space (`blendView`), which is what
-makes a 2× → 8× move feel even rather than front-loaded, and the country-fill
-canvas is rendered at 2× and scaled down by CSS so the coastline stays crisp at
-those deeper zooms. `frameRoute: false` on
-`RouteDots` turns the whole thing off (both worlds); an OS-level
-`prefers-reduced-motion` is honoured as well.
+`fitPointsView` first fits both airports and the arc between them, then clamps
+that fit into the `minRouteZoom … maxRouteZoom` window, so the camera can never
+overshoot either bound. On a 1280 × 800 hero (world scale ≈ 0.78) the defaults
+frame London/Paris at **4× the world view** — a real close-up of Western Europe
+where the original 2.2× cap left the two cities as specks — and a long haul
+such as London/Singapore lands at 3.2×, inside the window without being clipped.
+Lower the ceiling (`maxRouteZoom: 2`) for a calmer, more map-like feel; raise it
+(`8`, `12`) to push right into a city pair. Raise the floor above `1` to keep
+every frame tighter than the world (very long routes are then cropped); lower it
+below `1` to allow a little sea around the map.
+
+A second, independent guard keeps the frame readable: the visible slice of the
+world never drops below ~90 map px across the viewport's shorter side
+(`fitPointsView(..., { minVisibleSpanPx })`), which caps the zoom on small
+containers even when `maxRouteZoom` is huge. The framing also keeps a
+screen-space margin around the route for the airport dots and the city names.
+Zoom itself is interpolated in log space (`blendView`), which makes a large zoom
+feel even rather than front-loaded, and the country-fill canvas is rendered at
+2× and scaled down by CSS so the coastline stays crisp at deeper zooms.
+`frameRoute: false` on `RouteDots` turns the whole thing off (both worlds); an
+OS-level `prefers-reduced-motion` is honoured as well.
+
+In the showcase, the **World** panel's _Zoom floor_ and _Zoom ceiling_ sliders
+drive exactly these two options live, and both are written into the exported
+config under `flat.minRouteZoom` / `flat.maxRouteZoom`.
 
 ```ts
 new RouteDots(el, {
   world: 'flat',
-  flat: { zoomToRoute: true, zoomDurationMs: 1200, maxRouteZoom: 12 },
+  flat: {
+    zoomToRoute: true,
+    zoomDurationMs: 1200,
+    minRouteZoom: 1, // never further out than the whole world
+    maxRouteZoom: 5, // never closer than 5× the world view
+  },
   labels: { fontSize: 14 }, // 14 px, zoom or no zoom
 });
 // rd.on('route:drawn', …) fires when the zoom has landed and the route is up.

@@ -88,7 +88,7 @@ const scene = {
     },
     camera3d: { enabled: true, tilt: 40, yaw: -12, depth: 90, perspective: 900, follow: true },
     fallback: { enabled: true },
-    flat: { zoomToRoute: true, zoomDurationMs: 600, maxRouteZoom: 2 },
+    flat: { zoomToRoute: true, zoomDurationMs: 600, minRouteZoom: 1, maxRouteZoom: 4 },
   },
 } as const;
 

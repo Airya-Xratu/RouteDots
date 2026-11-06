@@ -54,11 +54,21 @@ export const WORLD_VIEW_FILL = 0.98;
 export const ROUTE_FRAME_MARGIN_PX = 56;
 
 /**
- * The furthest a route may zoom in (map px per CSS px). Far routes are framed
- * by their own fit — this only bounds short hops, so two neighbouring cities
- * get a close-up instead of a microscope on one town.
+ * How far in a route frame may zoom, **as a multiple of the whole-world view**.
+ * Far routes are framed by their own fit — this only bounds short hops, so two
+ * neighbouring cities get a close-up without the map dissolving into one town.
+ * Raise it (with `flat.maxRouteZoom`) for tighter close-ups, lower it to keep
+ * more context around every route.
  */
-export const DEFAULT_MAX_ROUTE_ZOOM = 8;
+export const DEFAULT_MAX_ROUTE_ZOOM = 4;
+
+/**
+ * How far *out* a route frame may zoom, as a multiple of the whole-world view.
+ * `1` is the world view itself — a route never pulls back past the whole
+ * planet, so both airports always fit. Lower it (< 1) to allow a little sea
+ * around the map; raise it to keep the frame tighter than the world.
+ */
+export const DEFAULT_MIN_ROUTE_ZOOM = 1;
 
 /**
  * How much of the world must stay on screen, in map px, measured across the
@@ -114,7 +124,7 @@ export function fitWorldView(map: FlatMapSize, viewport: FlatViewport): FlatView
 export interface RouteFrameOptions {
   /** Screen-space margin around the framed box, in CSS px (default 56). */
   marginPx?: number;
-  /** Maximum zoom-in (default {@link DEFAULT_MAX_ROUTE_ZOOM}). */
+  /** Maximum zoom-in, in map px per CSS px (default: unbounded but safe). */
   maxScale?: number;
   /**
    * Minimum zoom (default: the world view's scale). A route can never be
@@ -188,7 +198,7 @@ export function fitPointsView(
   const spanCap = Math.min(vw, vh) / spanFloor;
   const maxScale = Math.max(
     minScale,
-    Math.min(finite(options.maxScale, DEFAULT_MAX_ROUTE_ZOOM), spanCap),
+    Math.min(finite(options.maxScale, VIEW_SCALE_LIMITS.max), spanCap),
   );
   const scale = clamp(Math.min(availableW / boxW, availableH / boxH), minScale, maxScale);
 

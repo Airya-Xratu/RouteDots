@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_MAX_ROUTE_ZOOM,
+  DEFAULT_MIN_ROUTE_ZOOM,
   ROUTE_FRAME_MARGIN_PX,
   WORLD_VIEW_FILL,
   blendView,
@@ -94,20 +95,40 @@ describe('fitPointsView', () => {
     expect(spread).toBeGreaterThan(viewport.w / 4);
   });
 
-  it('caps the zoom so a short hop is not a microscope', () => {
-    const view = fitPointsView(
-      [
-        { x: 800, y: 400 },
-        { x: 812, y: 410 },
-      ],
-      MAP,
-      viewport,
-    )!;
+  it('never exceeds the maximum zoom it is given', () => {
+    const hop = [
+      { x: 800, y: 400 },
+      { x: 812, y: 410 },
+    ];
+    const view = fitPointsView(hop, MAP, viewport, { maxScale: 4 })!;
     // Either cap can win: the configured maximum, or the min-visible-span
     // guard (90 map px of the world must stay on screen).
-    const cap = Math.min(DEFAULT_MAX_ROUTE_ZOOM, viewport.h / 90);
+    const cap = Math.min(4, viewport.h / 90);
     expect(view.scale).toBeLessThanOrEqual(cap + 1e-9);
     expect(view.scale).toBeCloseTo(cap, 9);
+
+    // A tighter ceiling is respected just as strictly.
+    expect(fitPointsView(hop, MAP, viewport, { maxScale: 2.5 })!.scale).toBeCloseTo(2.5, 9);
+  });
+
+  it('never goes below the minimum zoom it is given', () => {
+    // Two airports at opposite corners want to zoom out past the world view.
+    const far = [
+      { x: 0, y: 0 },
+      { x: 1600, y: 800 },
+    ];
+    const world = fitWorldView(MAP, viewport);
+    const loose = fitPointsView(far, MAP, viewport, { minScale: world.scale * 0.7 })!;
+    expect(loose.scale).toBeLessThan(world.scale);
+    // A minimum above the natural fit wins, and the frame tightens to it.
+    const tight = fitPointsView(far, MAP, viewport, { minScale: world.scale * 1.6 })!;
+    expect(tight.scale).toBeCloseTo(world.scale * 1.6, 9);
+  });
+
+  it('defaults to the documented zoom range', () => {
+    // The map's own defaults: never out past the world, never in past 4× it.
+    expect(DEFAULT_MIN_ROUTE_ZOOM).toBe(1);
+    expect(DEFAULT_MAX_ROUTE_ZOOM).toBe(4);
   });
 
   it('zooms much further in for close cities than the old 2.2× cap', () => {
@@ -119,8 +140,9 @@ describe('fitPointsView', () => {
       ],
       MAP,
       viewport,
+      { maxScale: 4 },
     )!;
-    expect(view.scale).toBeGreaterThan(4);
+    expect(view.scale).toBeGreaterThan(3);
     // …while still keeping a readable slice of the world on screen (the
     // min-visible-span guard) rather than one town filling the frame.
     const visibleHeight = viewport.h / view.scale;

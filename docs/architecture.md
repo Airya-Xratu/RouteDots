@@ -214,10 +214,11 @@ Two framings, both from pure maths in `flat/framing.ts`:
   (letterboxed, aspect preserved, centred). This is the resting state: a
   visitor sees the entire styled planet before choosing a flight.
 - **Route view** — `fitPointsView` fits the two airports plus the arc's control
-  point with a screen-space margin, clamped between the world-view scale (never
-  zoom out past the whole world) and a zoom ceiling (`maxRouteZoom`, 8 by
-  default) that is further tightened so at least ~90 map px of the world stay on
-  screen — a close pair gets a real close-up, without turning into a microscope.
+  point with a screen-space margin, then clamps that fit into a zoom window:
+  `minRouteZoom … maxRouteZoom`, both **multiples of the world-view scale**
+  (defaults `1` and `4`), plus a min-visible-span guard that keeps at least ~90
+  map px of the world on screen. A close pair gets a real close-up, a long haul
+  keeps its whole region, and neither can overshoot the configured window.
 
 Both are `FlatView { scale, cx, cy }`, and the camera interpolates them
 perceptually (`blendView`: log scale, linear pan) so a 2× → 8× move does not

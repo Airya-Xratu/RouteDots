@@ -123,7 +123,8 @@ export interface RouteDotsOptions {
    * Camera pan/zoom when a route is set (default true). The 3D world pans
    * across the sphere; the flat world opens on the whole planet and **zooms
    * to the two airports before drawing the route** (tune that with
-   * `flat.zoomToRoute` / `flat.zoomDurationMs` / `flat.maxRouteZoom`).
+   * `flat.zoomToRoute` / `flat.zoomDurationMs` / `flat.minRouteZoom` /
+   * `flat.maxRouteZoom`).
    */
   frameRoute?: boolean;
   /** Enable the flat world fallback (default true). */
@@ -728,6 +729,7 @@ export class RouteDots {
         zoomToRoute: this.wantsRouteZoom(),
         zoomDurationMs: o.flat?.zoomDurationMs,
         maxRouteZoom: o.flat?.maxRouteZoom,
+        minRouteZoom: o.flat?.minRouteZoom,
       });
     }
   }
@@ -938,6 +940,7 @@ export class RouteDots {
       zoomToRoute: this.wantsRouteZoom(),
       zoomDurationMs: o.flat?.zoomDurationMs,
       maxRouteZoom: o.flat?.maxRouteZoom,
+      minRouteZoom: o.flat?.minRouteZoom,
     };
     this.flat = new FlatRouteMap(this.container, flatOptions);
     this.flat.onDrawn = () => this.emit('route:drawn', this.getRoute());

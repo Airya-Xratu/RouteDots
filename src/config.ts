@@ -744,6 +744,7 @@ function sanitizeFlat(
   }
   put(out, 'zoomDurationMs', readNumber(source.zoomDurationMs, `${path}.zoomDurationMs`, warnings));
   put(out, 'maxRouteZoom', readNumber(source.maxRouteZoom, `${path}.maxRouteZoom`, warnings));
+  put(out, 'minRouteZoom', readNumber(source.minRouteZoom, `${path}.minRouteZoom`, warnings));
   if ('colors' in source)
     put(out, 'colors', sanitizeColors(source.colors, `${path}.colors`, warnings));
   if ('route' in source) put(out, 'route', sanitizeRoute(source.route, `${path}.route`, warnings));
@@ -774,6 +775,7 @@ function sanitizeFlat(
       'zoomToRoute',
       'zoomDurationMs',
       'maxRouteZoom',
+      'minRouteZoom',
       'colors',
       'route',
       'labels',

@@ -121,9 +121,10 @@ test('flat world: whole world at rest, zoom to the route, then draw it', async (
   expect(framed.paths).toBe(1);
   expect(framed.labels).toEqual(['London', 'Dubai']);
 
-  // Zoomed in on the city pair — a real close-up, not the old 2.2× cap.
+  // Zoomed in on the city pair — a real close-up, not the old 2.2× cap in
+  // absolute terms, and never past the configured 4× the world view.
   expect(framed.view.scale).toBeGreaterThan(rest.view.scale * 3);
-  expect(framed.view.scale).toBeGreaterThan(4);
+  expect(framed.view.scale).toBeLessThanOrEqual(rest.view.scale * 4 + 1e-6);
   // …but never into a microscope: at least ~90 map px of the world stays on
   // screen, so there is always some geography around the two cities.
   expect(framed.viewport.h / framed.view.scale).toBeGreaterThanOrEqual(88);
@@ -354,10 +355,16 @@ test('two nearby cities zoom in much further than a long haul', async ({ page })
 
   expect(shortHop.labels).toEqual(['London', 'Paris']);
   expect(longHaul.view.scale).toBeGreaterThan(1.5);
-  // Several times tighter than the long haul…
-  expect(shortHop.view.scale).toBeGreaterThan(longHaul.view.scale * 2.5);
-  // …and close to the configured maximum (8 by default).
-  expect(shortHop.view.scale).toBeGreaterThan(6);
+  // Tighter than the long haul…
+  expect(shortHop.view.scale).toBeGreaterThan(longHaul.view.scale);
+  // …and pinned to the configured ceiling: 4× the world view by default.
+  const worldScale = await page.evaluate(() => {
+    const map = document.getElementById('map')!;
+    // The world view is the largest scale that still contains the whole map.
+    return Math.min(map.clientWidth / MAP.width, map.clientHeight / MAP.height) * 0.98;
+  });
+  expect(shortHop.view.scale).toBeLessThanOrEqual(worldScale * 4 + 1e-6);
+  expect(shortHop.view.scale).toBeGreaterThan(worldScale * 3.9);
   // Both airports still sit inside the frame with room for dot and name.
   const cdg = { x: ((2.352 + 180) / 360) * MAP.width, y: ((90 - 48.857) / 180) * MAP.height };
   for (const airport of [lhr, cdg]) {

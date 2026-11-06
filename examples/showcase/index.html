@@ -1000,7 +1000,7 @@ rd.applyConfig(nextConfig);</pre>
             speed: 0.4,
             interactive: false,
             frameRoute: true,
-            zoom: { enabled: true, durationMs: 900 },
+            zoom: { enabled: true, durationMs: 900, minZoom: 1, maxZoom: 4 },
             view: { lat: 40, lng: 25, altitude: 1.9 },
             hexTiles: {
               enabled: true,
@@ -1253,6 +1253,8 @@ rd.applyConfig(nextConfig);</pre>
             flat: {
               zoomToRoute: studio.scene.zoom.enabled,
               zoomDurationMs: studio.scene.zoom.durationMs,
+              minRouteZoom: studio.scene.zoom.minZoom,
+              maxRouteZoom: studio.scene.zoom.maxZoom,
             },
           });
         const applyLabels = () => rd.setOptions({ labels: labelsSnippet() });
@@ -1427,10 +1429,43 @@ rd.applyConfig(nextConfig);</pre>
             schedule(applyZoom);
           },
         });
+        const zoomMin = slider(worldBox, {
+          id: 'zoom-min',
+          label: 'Zoom floor',
+          min: 0.5,
+          max: 3,
+          step: 0.1,
+          value: STUDIO_DEFAULTS.scene.zoom.minZoom,
+          format: (v) => `${round(v, 1)}× world`,
+          onInput: (v) => {
+            // Never let the floor climb past the ceiling.
+            studio.scene.zoom.minZoom = v;
+            if (studio.scene.zoom.maxZoom < v) {
+              studio.scene.zoom.maxZoom = v;
+              zoomMax.paint(v);
+            }
+            schedule(applyZoom);
+          },
+        });
+        const zoomMax = slider(worldBox, {
+          id: 'zoom-max',
+          label: 'Zoom ceiling',
+          min: 1,
+          max: 12,
+          step: 0.5,
+          value: STUDIO_DEFAULTS.scene.zoom.maxZoom,
+          format: (v) => `${round(v, 1)}× world`,
+          onInput: (v) => {
+            studio.scene.zoom.maxZoom = Math.max(v, studio.scene.zoom.minZoom);
+            if (studio.scene.zoom.maxZoom !== v) zoomMax.paint(studio.scene.zoom.maxZoom);
+            schedule(applyZoom);
+          },
+        });
         note(
           worldBox,
           'The flat map opens on the whole world, then zooms until both airports are in ' +
-            'view — only then is the route drawn.',
+            'view — only then is the route drawn. The floor and ceiling bound that zoom, ' +
+            'as multiples of the world view: 1× is the whole planet.',
         );
 
         // ── Scene (the options the constructor usually hard-codes) ──────────
@@ -2222,6 +2257,8 @@ rd.applyConfig(nextConfig);</pre>
             flat: {
               zoomToRoute: studio.scene.zoom.enabled,
               zoomDurationMs: studio.scene.zoom.durationMs,
+              minRouteZoom: round(studio.scene.zoom.minZoom, 2),
+              maxRouteZoom: round(studio.scene.zoom.maxZoom, 2),
             },
           };
           const lines = [];
@@ -2254,6 +2291,8 @@ rd.applyConfig(nextConfig);</pre>
           camInteractive.paint(studio.camera3d.interactive);
           zoomToggle.paint(studio.scene.zoom.enabled);
           zoomDuration.paint(studio.scene.zoom.durationMs);
+          zoomMin.paint(studio.scene.zoom.minZoom);
+          zoomMax.paint(studio.scene.zoom.maxZoom);
           planeIconSelect.value = studio.plane.icon;
           pathField.input.value = customIconPath;
           pathField.input.disabled = studio.plane.icon !== 'custom';
@@ -2460,6 +2499,12 @@ rd.applyConfig(nextConfig);</pre>
             if (typeof options.flat.zoomDurationMs === 'number') {
               studio.scene.zoom.durationMs = options.flat.zoomDurationMs;
             }
+            if (typeof options.flat.minRouteZoom === 'number') {
+              studio.scene.zoom.minZoom = options.flat.minRouteZoom;
+            }
+            if (typeof options.flat.maxRouteZoom === 'number') {
+              studio.scene.zoom.maxZoom = options.flat.maxRouteZoom;
+            }
           }
           if (options.airports) {
             if (typeof options.airports.size === 'number') {
@@ -2657,6 +2702,8 @@ rd.applyConfig(nextConfig);</pre>
             flat: {
               zoomToRoute: STUDIO_DEFAULTS.scene.zoom.enabled,
               zoomDurationMs: STUDIO_DEFAULTS.scene.zoom.durationMs,
+              minRouteZoom: STUDIO_DEFAULTS.scene.zoom.minZoom,
+              maxRouteZoom: STUDIO_DEFAULTS.scene.zoom.maxZoom,
             },
             labels: labelsSnippet(),
           });
