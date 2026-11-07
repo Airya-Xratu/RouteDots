@@ -39,7 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   specks — and a long haul (London/Singapore) sits at 3.2×, inside the window
   without being clipped. The showcase's **World** panel exposes both limits as
   _Zoom floor_ / _Zoom ceiling_ sliders and writes them into the exported config.
-  At these deeper zooms the country-fill canvas is supersampled
+  The showcase studio finally has a smoke test (`src/__tests__/showcase.test.ts`):
+  it boots the page's inline script in jsdom against a stand-in library, so an
+  eagerly-evaluated mistake in the studio (a `const` used before it is
+  initialised in a slider formatter, say — which silently stopped the panel from
+  opening) now fails `npm test` instead of a browser. At these deeper zooms the
+  country-fill canvas is supersampled
   2× (CSS-scaled back down) so coastlines stay crisp, and city dots + ripple
   rings are now sized in screen px like the labels.
 - **City-name text size is a screen size.** `labels.fontSize` is now the size

@@ -1436,7 +1436,7 @@ rd.applyConfig(nextConfig);</pre>
           max: 3,
           step: 0.1,
           value: STUDIO_DEFAULTS.scene.zoom.minZoom,
-          format: (v) => `${round(v, 1)}× world`,
+          format: (v) => `${Number(v).toFixed(1)}× world`,
           onInput: (v) => {
             // Never let the floor climb past the ceiling.
             studio.scene.zoom.minZoom = v;
@@ -1454,7 +1454,7 @@ rd.applyConfig(nextConfig);</pre>
           max: 12,
           step: 0.5,
           value: STUDIO_DEFAULTS.scene.zoom.maxZoom,
-          format: (v) => `${round(v, 1)}× world`,
+          format: (v) => `${Number(v).toFixed(1)}× world`,
           onInput: (v) => {
             studio.scene.zoom.maxZoom = Math.max(v, studio.scene.zoom.minZoom);
             if (studio.scene.zoom.maxZoom !== v) zoomMax.paint(studio.scene.zoom.maxZoom);
