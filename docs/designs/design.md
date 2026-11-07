@@ -22,26 +22,26 @@ The product serves frontend developers evaluating or integrating the library, as
 
 Use semantic roles and maintain strong contrast. The palette below is the default light presentation; dark surfaces are appropriate for code, map overlays, and an optional dark appearance.
 
-| Token | Value | Use |
-| --- | --- | --- |
-| `canvas` | `#F7F8FA` | Main page background |
-| `surface` | `#FFFFFF` | Cards, documentation content, form fields |
-| `surface-muted` | `#F0F2F5` | Secondary panels and subtle grouped areas |
-| `ink` | `#171B22` | Primary text and headings |
-| `ink-muted` | `#606A78` | Supporting copy, labels, metadata |
-| `ink-subtle` | `#858E9B` | Tertiary annotations; never use for essential copy |
-| `line` | `#E2E6EB` | Borders, separators, control outlines |
-| `accent` | `#176B63` | Primary actions, focus, links, active state |
-| `accent-hover` | `#10564F` | Hover state for primary actions |
-| `accent-soft` | `#E4F2EF` | Selected chips, quiet callouts |
-| `route-outbound` | `#F07845` | Outbound route emphasis |
-| `route-return` | `#7668D8` | Return route emphasis |
-| `success` | `#287A50` | Positive confirmation |
-| `warning` | `#A96316` | Caution and non-blocking notices |
-| `danger` | `#B83A3A` | Errors and destructive actions |
-| `night` | `#111923` | Dark code/map surfaces |
-| `night-raised` | `#1B2632` | Raised elements on dark surfaces |
-| `night-line` | `#303C49` | Dark-mode borders |
+| Token            | Value     | Use                                                |
+| ---------------- | --------- | -------------------------------------------------- |
+| `canvas`         | `#F7F8FA` | Main page background                               |
+| `surface`        | `#FFFFFF` | Cards, documentation content, form fields          |
+| `surface-muted`  | `#F0F2F5` | Secondary panels and subtle grouped areas          |
+| `ink`            | `#171B22` | Primary text and headings                          |
+| `ink-muted`      | `#606A78` | Supporting copy, labels, metadata                  |
+| `ink-subtle`     | `#858E9B` | Tertiary annotations; never use for essential copy |
+| `line`           | `#E2E6EB` | Borders, separators, control outlines              |
+| `accent`         | `#176B63` | Primary actions, focus, links, active state        |
+| `accent-hover`   | `#10564F` | Hover state for primary actions                    |
+| `accent-soft`    | `#E4F2EF` | Selected chips, quiet callouts                     |
+| `route-outbound` | `#F07845` | Outbound route emphasis                            |
+| `route-return`   | `#7668D8` | Return route emphasis                              |
+| `success`        | `#287A50` | Positive confirmation                              |
+| `warning`        | `#A96316` | Caution and non-blocking notices                   |
+| `danger`         | `#B83A3A` | Errors and destructive actions                     |
+| `night`          | `#111923` | Dark code/map surfaces                             |
+| `night-raised`   | `#1B2632` | Raised elements on dark surfaces                   |
+| `night-line`     | `#303C49` | Dark-mode borders                                  |
 
 Use the outbound/return colors consistently in legends, route controls, and code examples. Do not depend on color alone to distinguish the route legs: also use labels, line styles, or directional cues. Globe and map colors may be tuned for legibility while preserving the semantic colors.
 
@@ -75,18 +75,22 @@ Use the outbound/return colors consistently in legends, route controls, and code
 ## Components and states
 
 ### Navigation
+
 Provide a compact brand mark and clear destinations such as **Overview**, **Playground**, **Docs**, and **Examples**. Show the active destination clearly. On narrow viewports, collapse navigation behind an accessible menu.
 
 ### Buttons and links
+
 - Primary action: solid `accent`, white text, strong focus ring, concise verb-first label.
 - Secondary action: white or transparent surface with a visible line border.
 - Tertiary action: text link with a clear hover and focus state.
 - Include default, hover, active, focus-visible, disabled, and loading treatments where relevant. Avoid icon-only actions without accessible names.
 
 ### Inputs and selectors
+
 Use persistent labels, helpful examples, and clear selected values. Keep source and destination visually paired with a swap action between them. Provide visible focus, error, and disabled states. Use native controls where that improves keyboard and assistive-technology behavior.
 
 ### Map, route, and flight controls
+
 - Keep the map the main canvas. Put route search and mode controls in an anchored, responsive panel rather than scattering them over the map.
 - Show source and destination, one-way/round-trip state, and the selected map mode explicitly.
 - Make route actions reversible and provide clear feedback for invalid city pairs, loading, cleared route, and successful route display.
@@ -94,9 +98,11 @@ Use persistent labels, helpful examples, and clear selected values. Keep source 
 - The flat map is a first-class option, not an error state. Indicate the active rendering mode without implying that one mode is broken.
 
 ### Documentation and code
+
 Use a persistent left navigation on wide screens, a focused article column, and a contextual table of contents only when useful. Style inline code distinctly from prose. Code blocks need language labels, copy feedback, and horizontal overflow handling. Tables must remain readable on small screens. Explain API behavior with consistent terminology: **route**, **outbound**, **return**, **globe**, **flat map**, **plane**, **endpoint**, and **theme**.
 
 ### Feedback
+
 Use concise status messages near the action that caused them. Error messages describe how to recover. Success feedback is brief and does not obscure the visualization. Provide empty, loading, error, and reduced-motion states where applicable.
 
 ## Motion and interaction

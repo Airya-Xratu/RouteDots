@@ -14,11 +14,7 @@ import landTopo from '../data/land-110m.js';
 import countriesTopo from '../data/countries-110m.js';
 import { buildDotGrid, type DotPattern } from '../core/dotPattern.js';
 import { buildHexGrid, type HexPattern } from '../core/hexPattern.js';
-import {
-  decodeCountryPolygonsCached,
-  decodeRings,
-  type TopoLand,
-} from '../core/topojson.js';
+import { decodeCountryPolygonsCached, decodeRings, type TopoLand } from '../core/topojson.js';
 import {
   PALETTES,
   paletteToGlobeTheme,
@@ -353,7 +349,11 @@ export class GlobeRenderer {
   }
 
   /** Builds or rebuilds the hex-tile overlay shell on top of the country fills. */
-  private buildHexOverlay(fallbackColor: string, hexOpts: HexTilesOptions, texWidth?: number): void {
+  private buildHexOverlay(
+    fallbackColor: string,
+    hexOpts: HexTilesOptions,
+    texWidth?: number,
+  ): void {
     // Tear down any previous overlay.
     this.disposeHexOverlay();
 
