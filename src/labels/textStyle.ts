@@ -24,8 +24,19 @@ export interface CityLabelTextStyle {
   /**
    * Font size in px, measured like the globe pin's CSS px (the flat map
    * multiplies it by {@link FLAT_LABEL_SCALE} into its 2× map space).
+   *
+   * On the flat map this is the size **on screen**: the label is
+   * counter-scaled by the map's zoom, so a zoomed-in route does not blow the
+   * city name up to billboard size. Set {@link scaleWithZoom} to let the text
+   * grow with the map instead.
    */
   fontSize?: number;
+  /**
+   * Flat map: let the city names zoom with the map (default `false` — the
+   * labels keep the configured {@link fontSize} on screen at every zoom
+   * level). The globe pin badges are unaffected.
+   */
+  scaleWithZoom?: boolean;
   /** CSS `font-weight` (default 600). */
   fontWeight?: number | string;
   /** CSS `letter-spacing`, e.g. `'0.08em'` or `'1px'`. */
@@ -51,6 +62,8 @@ export interface ResolvedCityLabelStyle {
   /** `null` = no halo. */
   halo: string | null;
   haloWidth: number;
+  /** Flat map: draw the labels in map space (they zoom with the map). */
+  scaleWithZoom: boolean;
 }
 
 /** Default label font size, in the globe pin's CSS px. */
@@ -109,6 +122,42 @@ export function resolveCityLabelStyle(
       Number.isFinite(o.haloWidth) && (o.haloWidth as number) > 0
         ? (o.haloWidth as number)
         : DEFAULT_HALO_WIDTH,
+    scaleWithZoom: o.scaleWithZoom === true,
+  };
+}
+
+/** Screen-space gap between an airport dot and its city name, in CSS px. */
+export const FLAT_LABEL_OFFSET_PX = 12;
+
+/**
+ * Where a flat-map city label sits, and at what local scale.
+ *
+ * `anchor` is the airport dot in map px, `viewScale` the stage scale (map px
+ * per CSS px is `1 / viewScale`). With the default screen-space labels the
+ * label is placed {@link FLAT_LABEL_OFFSET_PX} CSS px up-and-right of the dot
+ * and counter-scaled so the configured font size is the on-screen size at any
+ * zoom; with `scaleWithZoom` the offset is in map px and the text scales with
+ * the map, exactly like the geography.
+ *
+ * Pure: returns numbers, not SVG — unit-tested.
+ */
+export function flatLabelPlacement(
+  anchor: { x: number; y: number },
+  viewScale: number,
+  options: { scaleWithZoom?: boolean; offsetPx?: number } = {},
+): { x: number; y: number; scale: number } {
+  const scale = Number.isFinite(viewScale) && viewScale > 0 ? viewScale : 1;
+  const offset = Number.isFinite(options.offsetPx)
+    ? (options.offsetPx as number)
+    : FLAT_LABEL_OFFSET_PX;
+  if (options.scaleWithZoom === true) {
+    return { x: anchor.x + offset, y: anchor.y - offset, scale: 1 };
+  }
+  const offsetMap = offset / scale;
+  return {
+    x: anchor.x + offsetMap,
+    y: anchor.y - offsetMap,
+    scale: 1 / (scale * FLAT_LABEL_SCALE),
   };
 }
 

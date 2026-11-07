@@ -65,6 +65,7 @@ export * from './routes/PlaneLayer.js';
 // Flat world
 export * from './flat/layers.js';
 export * from './flat/camera3d.js';
+export * from './flat/framing.js';
 export * from './flat/routePath.js';
 export * from './flat/borderPolylines.js';
 export * from './flat/countryPaths.js';

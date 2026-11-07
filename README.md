@@ -49,14 +49,34 @@ and a flat 2D fallback for browsers without WebGL.
   apart as you like). City names are typeset with the `labels`
   text style (font, size, weight, spacing, colours, halo), and the **source
   and destination airports** can be styled independently (`airports`: dot
-  colour / size, pulse ring, per endpoint). Call `rd.setOptions()` /
-  `rd.setColors()` to restyle a live scene without restarting the animation.
-  The showcase studio exports that whole scene as JSON —
-  `RouteDots.fromConfig(el, config)` loads it in your project.
+  colour / size, pulse ring, per endpoint). City names are **screen-sized**:
+  `labels.fontSize` is the size you get on screen, whether the map shows the
+  whole planet or one continent (`labels.scaleWithZoom` opts out). Call
+  `rd.setOptions()` / `rd.setColors()` to restyle a live scene without
+  restarting the animation. The showcase studio exports that whole scene as
+  JSON — `RouteDots.fromConfig(el, config)` loads it in your project.
 - 🌐 **3D globe or flat map — your call.** `world: 'auto' | 'globe' | 'flat'`
   picks the renderer, and the flat map can itself be a 3D scene
   (`camera3d`): CSS perspective, drag-to-orbit, wheel zoom and depth layers
   that float the routes and the plane above the geography.
+- 🗺️ **The flat map opens wide, then flies to the route.** At rest it shows the
+  **whole world**, letterboxed in your palette — filled countries, hairline
+  borders, no crop. Pick a flight and it **zooms to it with a smooth ease**,
+  far enough that both airports and the arc between them are in view, and only
+  then draws the route — close city pairs get a much tighter close-up than
+  long hauls. Change the cities and it **pulls back out to the whole world
+  first, then dives into the new pair** in one continuous, eased move (the old
+  route rides the zoom-out); clearing it zooms back out too. The framing is pure maths
+  (`flat/framing.ts`), never zooms further out than the whole world, and is
+  then draws the route — close city pairs get a much tighter close-up than
+  long hauls. Change the cities and it **pulls back out to the whole world
+  first, then dives into the new pair** in one continuous, eased move (the old
+  route rides the zoom-out); clearing it zooms back out too. The framing is pure maths
+  (`flat/framing.ts`) and every move is bounded by a configurable zoom window:
+  `flat.minRouteZoom` / `flat.maxRouteZoom` (multiples of the world view, `1` and
+  `4` by default), alongside `flat.zoomToRoute` / `zoomDurationMs`
+  (`frameRoute: false` switches it off). Both limits are sliders in the showcase
+  studio.
 - 🧯 **Graceful degradation.** Without WebGL you get the same flat map in 2D
   with curved SVG routes and an animated plane. Same API, no breakage.
 

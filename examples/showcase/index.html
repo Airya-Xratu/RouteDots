@@ -879,8 +879,14 @@ rd.applyConfig(nextConfig);</pre>
 
         let trip = 'round';
 
+        // `?world=flat` (or globe / auto) opens the demo in that renderer, so a
+        // link can show the flat world — the studio select follows.
+        const worldParam = new URLSearchParams(location.search).get('world');
+        const startWorld = ['auto', 'globe', 'flat'].includes(worldParam) ? worldParam : 'auto';
+
         const rd = new RouteDots(document.getElementById('globe'), {
           theme: 'light',
+          world: startWorld,
           view: { lat: 40, lng: 25, altitude: 1.9 },
           autoRotate: { enabled: true, speed: 0.4 },
           plane: { flightMs: 4800, pauseMs: 800 },
@@ -994,6 +1000,7 @@ rd.applyConfig(nextConfig);</pre>
             speed: 0.4,
             interactive: false,
             frameRoute: true,
+            zoom: { enabled: true, durationMs: 900, minZoom: 1, maxZoom: 4 },
             view: { lat: 40, lng: 25, altitude: 1.9 },
             hexTiles: {
               enabled: true,
@@ -1034,7 +1041,14 @@ rd.applyConfig(nextConfig);</pre>
             dot: { size: 0.006, dim: 0.45 },
             ripple: { size: 0.011, width: 0.0025, grow: 2.6, opacity: 0.55 },
           },
-          labels: { fontSize: 12, fontWeight: 600, letterSpacing: 1, pill: true, fontFamily: '' },
+          labels: {
+            fontSize: 12,
+            fontWeight: 600,
+            letterSpacing: 1,
+            pill: true,
+            fontFamily: '',
+            scaleWithZoom: false,
+          },
           airports: { size: 8, ring: true, sourceColor: '', destinationColor: '' },
           plane: { icon: 'airliner', size: 30, enabled: true, flightMs: 4800, pauseMs: 800 },
           camera3d: {
@@ -1048,7 +1062,7 @@ rd.applyConfig(nextConfig);</pre>
         };
         let studio = JSON.parse(JSON.stringify(STUDIO_DEFAULTS));
         let dashLeg = 'both';
-        let worldMode = 'auto';
+        let worldMode = startWorld;
         let customIconPath = '';
         const paletteOverrides = {};
 
@@ -1232,6 +1246,17 @@ rd.applyConfig(nextConfig);</pre>
             },
           });
         const applyCamera = () => rd.setOptions({ camera3d: { ...studio.camera3d } });
+        // The flat map's zoom is a `flat` option: it opens on the whole world,
+        // then flies to the route.
+        const applyZoom = () =>
+          rd.setOptions({
+            flat: {
+              zoomToRoute: studio.scene.zoom.enabled,
+              zoomDurationMs: studio.scene.zoom.durationMs,
+              minRouteZoom: studio.scene.zoom.minZoom,
+              maxRouteZoom: studio.scene.zoom.maxZoom,
+            },
+          });
         const applyLabels = () => rd.setOptions({ labels: labelsSnippet() });
         // Endpoint dots read px like the flat map; the globe gets globe radii.
         const AIRPORT_PX_PER_UNIT = 1300;
@@ -1272,6 +1297,7 @@ rd.applyConfig(nextConfig);</pre>
               labelBackgroundOverride !== null
                 ? labelBackgroundOverride
                 : Boolean(studio.labels.pill),
+            scaleWithZoom: Boolean(studio.labels.scaleWithZoom),
           };
           if (studio.labels.fontFamily.trim()) snippet.fontFamily = studio.labels.fontFamily.trim();
           return snippet;
@@ -1288,7 +1314,7 @@ rd.applyConfig(nextConfig);</pre>
             ['globe', '3D globe'],
             ['flat', 'Flat map'],
           ],
-          value: 'auto',
+          value: startWorld,
           onChange: (value) => {
             worldMode = value;
             rd.setWorld(value);
@@ -1381,6 +1407,66 @@ rd.applyConfig(nextConfig);</pre>
           },
         });
         note(worldBox, 'Drag the flat map to orbit the camera; scroll to zoom.');
+        const zoomToggle = checkbox(worldBox, {
+          id: 'zoom-route',
+          label: 'Zoom to the route',
+          checked: STUDIO_DEFAULTS.scene.zoom.enabled,
+          onChange: (on) => {
+            studio.scene.zoom.enabled = on;
+            schedule(applyZoom);
+          },
+        });
+        const zoomDuration = slider(worldBox, {
+          id: 'zoom-duration',
+          label: 'Zoom duration',
+          min: 0,
+          max: 2400,
+          step: 100,
+          value: STUDIO_DEFAULTS.scene.zoom.durationMs,
+          format: (v) => (v === 0 ? 'instant' : `${v}ms`),
+          onInput: (v) => {
+            studio.scene.zoom.durationMs = v;
+            schedule(applyZoom);
+          },
+        });
+        const zoomMin = slider(worldBox, {
+          id: 'zoom-min',
+          label: 'Zoom floor',
+          min: 0.5,
+          max: 3,
+          step: 0.1,
+          value: STUDIO_DEFAULTS.scene.zoom.minZoom,
+          format: (v) => `${Number(v).toFixed(1)}× world`,
+          onInput: (v) => {
+            // Never let the floor climb past the ceiling.
+            studio.scene.zoom.minZoom = v;
+            if (studio.scene.zoom.maxZoom < v) {
+              studio.scene.zoom.maxZoom = v;
+              zoomMax.paint(v);
+            }
+            schedule(applyZoom);
+          },
+        });
+        const zoomMax = slider(worldBox, {
+          id: 'zoom-max',
+          label: 'Zoom ceiling',
+          min: 1,
+          max: 12,
+          step: 0.5,
+          value: STUDIO_DEFAULTS.scene.zoom.maxZoom,
+          format: (v) => `${Number(v).toFixed(1)}× world`,
+          onInput: (v) => {
+            studio.scene.zoom.maxZoom = Math.max(v, studio.scene.zoom.minZoom);
+            if (studio.scene.zoom.maxZoom !== v) zoomMax.paint(studio.scene.zoom.maxZoom);
+            schedule(applyZoom);
+          },
+        });
+        note(
+          worldBox,
+          'The flat map opens on the whole world, then zooms until both airports are in ' +
+            'view — only then is the route drawn. The floor and ceiling bound that zoom, ' +
+            'as multiples of the world view: 1× is the whole planet.',
+        );
 
         // ── Scene (the options the constructor usually hard-codes) ──────────
         const sceneBox = section('studio-scene', 'Scene');
@@ -1870,6 +1956,15 @@ rd.applyConfig(nextConfig);</pre>
             schedule(applyLabels);
           },
         });
+        const labelZoom = checkbox(labelsBox, {
+          id: 'label-zoom',
+          label: 'Scale with map zoom',
+          checked: STUDIO_DEFAULTS.labels.scaleWithZoom,
+          onChange: (on) => {
+            studio.labels.scaleWithZoom = on;
+            schedule(applyLabels);
+          },
+        });
         const labelFamily = textField(labelsBox, {
           id: 'label-family',
           label: 'Font family',
@@ -1882,7 +1977,9 @@ rd.applyConfig(nextConfig);</pre>
         });
         note(
           labelsBox,
-          'Typesets the city names at both route ends — the globe pins and the flat labels.',
+          'Typesets the city names at both route ends — the globe pins and the flat labels. ' +
+            'On the flat map the size is on screen: it survives the zoom unless you ask ' +
+            'the names to scale with the map.',
         );
 
         // ── Airports (route endpoints) ──────────────────────────────────────
@@ -2157,6 +2254,12 @@ rd.applyConfig(nextConfig);</pre>
               depth: studio.camera3d.depth,
               interactive: studio.camera3d.interactive,
             },
+            flat: {
+              zoomToRoute: studio.scene.zoom.enabled,
+              zoomDurationMs: studio.scene.zoom.durationMs,
+              minRouteZoom: round(studio.scene.zoom.minZoom, 2),
+              maxRouteZoom: round(studio.scene.zoom.maxZoom, 2),
+            },
           };
           const lines = [];
           if (Object.keys(paletteOverrides).length) {
@@ -2186,6 +2289,10 @@ rd.applyConfig(nextConfig);</pre>
           camYaw.paint(studio.camera3d.yaw);
           camDepth.paint(studio.camera3d.depth);
           camInteractive.paint(studio.camera3d.interactive);
+          zoomToggle.paint(studio.scene.zoom.enabled);
+          zoomDuration.paint(studio.scene.zoom.durationMs);
+          zoomMin.paint(studio.scene.zoom.minZoom);
+          zoomMax.paint(studio.scene.zoom.maxZoom);
           planeIconSelect.value = studio.plane.icon;
           pathField.input.value = customIconPath;
           pathField.input.disabled = studio.plane.icon !== 'custom';
@@ -2206,6 +2313,7 @@ rd.applyConfig(nextConfig);</pre>
           labelSpacing.paint(studio.labels.letterSpacing);
           labelPill.paint(studio.labels.pill);
           labelFamily.input.value = studio.labels.fontFamily;
+          labelZoom.paint(studio.labels.scaleWithZoom);
           airportSize.paint(studio.airports.size);
           airportRing.paint(studio.airports.ring);
           angleOut.paint(studio.route.outbound.angle);
@@ -2379,6 +2487,23 @@ rd.applyConfig(nextConfig);</pre>
             if (spacing) studio.labels.letterSpacing = Math.round(Number(spacing[1]) * 100);
             else if (typeof options.labels.letterSpacing === 'string') {
               labelSpacingRaw = options.labels.letterSpacing;
+            }
+            if (typeof options.labels.scaleWithZoom === 'boolean') {
+              studio.labels.scaleWithZoom = options.labels.scaleWithZoom;
+            }
+          }
+          if (options.flat) {
+            if (typeof options.flat.zoomToRoute === 'boolean') {
+              studio.scene.zoom.enabled = options.flat.zoomToRoute;
+            }
+            if (typeof options.flat.zoomDurationMs === 'number') {
+              studio.scene.zoom.durationMs = options.flat.zoomDurationMs;
+            }
+            if (typeof options.flat.minRouteZoom === 'number') {
+              studio.scene.zoom.minZoom = options.flat.minRouteZoom;
+            }
+            if (typeof options.flat.maxRouteZoom === 'number') {
+              studio.scene.zoom.maxZoom = options.flat.maxRouteZoom;
             }
           }
           if (options.airports) {
@@ -2574,6 +2699,13 @@ rd.applyConfig(nextConfig);</pre>
             autoRotate: { enabled: true, speed: 0.4 },
             plane: { flightMs: 4800, pauseMs: 800 },
             hexTiles: hexTilesSnippet(),
+            flat: {
+              zoomToRoute: STUDIO_DEFAULTS.scene.zoom.enabled,
+              zoomDurationMs: STUDIO_DEFAULTS.scene.zoom.durationMs,
+              minRouteZoom: STUDIO_DEFAULTS.scene.zoom.minZoom,
+              maxRouteZoom: STUDIO_DEFAULTS.scene.zoom.maxZoom,
+            },
+            labels: labelsSnippet(),
           });
           showSnippet();
           setStatus('Reset to defaults', 'ok');

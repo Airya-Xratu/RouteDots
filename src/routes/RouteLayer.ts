@@ -95,8 +95,12 @@ export class RouteLayer {
   private pulses: Pulse[] = [];
   private drawStart: number | null = null;
   private route: RouteSpec | null = null;
-  private lastRoute: { origin: LatLon; dest: LatLon; roundTrip: boolean; dualEdge?: boolean } | null =
-    null;
+  private lastRoute: {
+    origin: LatLon;
+    dest: LatLon;
+    roundTrip: boolean;
+    dualEdge?: boolean;
+  } | null = null;
   private lastTime: number | null = null;
   private onDrawnCallback: (() => void) | null = null;
   /** Plane state for trail/direction (single-edge round trips). */

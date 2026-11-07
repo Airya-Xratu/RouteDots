@@ -530,6 +530,9 @@ function sanitizeLabels(
   }
   put(out, 'fontFamily', readString(source.fontFamily, `${path}.fontFamily`, warnings, 300));
   put(out, 'fontSize', readNumber(source.fontSize, `${path}.fontSize`, warnings));
+  if ('scaleWithZoom' in source) {
+    put(out, 'scaleWithZoom', readBoolean(source.scaleWithZoom, `${path}.scaleWithZoom`, warnings));
+  }
   if (typeof source.fontWeight === 'number' && Number.isFinite(source.fontWeight)) {
     out.fontWeight = source.fontWeight;
   } else if (typeof source.fontWeight === 'string' && source.fontWeight.trim()) {
@@ -556,6 +559,7 @@ function sanitizeLabels(
       'background',
       'fontFamily',
       'fontSize',
+      'scaleWithZoom',
       'fontWeight',
       'letterSpacing',
       'halo',
@@ -735,6 +739,12 @@ function sanitizeFlat(
   put(out, 'width', readNumber(source.width, `${path}.width`, warnings));
   put(out, 'flightMs', readNumber(source.flightMs, `${path}.flightMs`, warnings));
   put(out, 'pauseMs', readNumber(source.pauseMs, `${path}.pauseMs`, warnings));
+  if ('zoomToRoute' in source) {
+    put(out, 'zoomToRoute', readBoolean(source.zoomToRoute, `${path}.zoomToRoute`, warnings));
+  }
+  put(out, 'zoomDurationMs', readNumber(source.zoomDurationMs, `${path}.zoomDurationMs`, warnings));
+  put(out, 'maxRouteZoom', readNumber(source.maxRouteZoom, `${path}.maxRouteZoom`, warnings));
+  put(out, 'minRouteZoom', readNumber(source.minRouteZoom, `${path}.minRouteZoom`, warnings));
   if ('colors' in source)
     put(out, 'colors', sanitizeColors(source.colors, `${path}.colors`, warnings));
   if ('route' in source) put(out, 'route', sanitizeRoute(source.route, `${path}.route`, warnings));
@@ -762,6 +772,10 @@ function sanitizeFlat(
       'width',
       'flightMs',
       'pauseMs',
+      'zoomToRoute',
+      'zoomDurationMs',
+      'maxRouteZoom',
+      'minRouteZoom',
       'colors',
       'route',
       'labels',

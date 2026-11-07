@@ -26,12 +26,7 @@ export interface HexTextureResult {
  * Projects a lat/lng tile centre to pixel coordinates on an equirectangular
  * canvas — identical projection to {@link projectDotToPx}.
  */
-function projectHexToPx(
-  lat: number,
-  lng: number,
-  width: number,
-  height: number,
-): [number, number] {
+function projectHexToPx(lat: number, lng: number, width: number, height: number): [number, number] {
   const x = ((lng + 180) / 360) * width;
   const y = ((90 - lat) / 180) * height;
   return [x, y];
@@ -41,12 +36,7 @@ function projectHexToPx(
  * Draws a single pointy-top regular hexagon centred at (cx, cy) with the
  * given circum-radius in px.
  */
-function drawHex(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  r: number,
-): void {
+function drawHex(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
   ctx.beginPath();
   for (let i = 0; i < 6; i++) {
     // Pointy-top: vertices at angles π/6, π/2, 5π/6, …

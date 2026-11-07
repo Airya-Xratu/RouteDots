@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>RouteDots E2E fixture — flat world view &amp; route zoom</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      #map {
+        position: relative;
+        width: 100%;
+        height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script src="../../dist/routedots.browser.global.js"></script>
+    <script>
+      window.__state = { ready: false, error: null, drawn: 0 };
+      try {
+        const { RouteDots } = window.RouteDots;
+        const noFrame = new URLSearchParams(location.search).get('frameRoute') === '0';
+        const rd = new RouteDots(document.getElementById('map'), {
+          world: 'flat',
+          theme: 'light',
+          frameRoute: !noFrame,
+          flat: { zoomDurationMs: 400 },
+        });
+        rd.on('route:drawn', () => {
+          window.__state.drawn += 1;
+        });
+        window.__rd = rd;
+        window.__state.ready = true;
+      } catch (err) {
+        window.__state.error = String((err && err.message) || err);
+      }
+    </script>
+  </body>
+</html>

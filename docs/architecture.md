@@ -53,6 +53,7 @@ src/
 │   ├── layers.ts             Layer names/attributes of the flat DOM stack
 │   ├── countryPaths.ts       Country polygons → SVG path data (pure)
 │   ├── routePath.ts          Quadratic arcs + framing bounds — pure
+│   ├── framing.ts            World view + route framing + view tweens — pure
 │   ├── camera3d.ts           3D camera maths: transforms, zoom, follow — pure
 │   └── FlatRouteMap.ts       Flat world (canvas fills + SVG routes + 3D camera)
 └── data/
@@ -205,9 +206,39 @@ instead of hard-clipping at the silhouette.
 lattice (equirectangular), an SVG overlay (two quadratic-Bézier dashed routes
 — outbound up, return down — plus endpoint markers, labels and the plane), and
 a plane moved along `getPointAtLength`. A stage div with an explicit pixel size
-keeps canvas, SVG-viewBox and framing math in one coordinate space;
-`frameRoute` pans/zooms it (CSS transform, 700 ms ease-out) to centre the
-route.
+keeps canvas, SVG-viewBox and framing math in one coordinate space.
+
+Two framings, both from pure maths in `flat/framing.ts`:
+
+- **World view** — `fitWorldView` contains the whole map in the container
+  (letterboxed, aspect preserved, centred). This is the resting state: a
+  visitor sees the entire styled planet before choosing a flight.
+- **Route view** — `fitPointsView` fits the two airports plus the arc's control
+  point with a screen-space margin, then clamps that fit into a zoom window:
+  `minRouteZoom … maxRouteZoom`, both **multiples of the world-view scale**
+  (defaults `1` and `4`), plus a min-visible-span guard that keeps at least ~90
+  map px of the world on screen. A close pair gets a real close-up, a long haul
+  keeps its whole region, and neither can overshoot the configured window.
+
+Both are `FlatView { scale, cx, cy }`, and the camera interpolates them
+perceptually (`blendView`: log scale, linear pan) so a 2× → 8× move does not
+feel front-loaded.
+
+`setRoute` builds a `ViewPath` — a list of keyframes plus normalised stops —
+and plays it as **one** tween (`zoomDuration(legs)`: 900 ms, × 1.5 for a
+multi-leg move, capped at 12 s). A first route is a two-keyframe path
+(current → route framing); replacing an already-drawn route is a three-keyframe
+path `[current, world, target]`, with a milestone at the world stop that clears
+the old route visuals. Playback maps the clock onto the path with
+`pathProgress`, which eases **each leg** (smoothstep): the camera slows into the
+wide view and accelerates out of it, so a destination change reads as one
+"up, across, down" arc rather than two tweens with a stop between them. The
+arcs, airport dots, city names and plane are built only when the tween lands,
+and `clearRoute` eases back out. Screen-space
+overlay elements (city names, airport dots, plane) are counter-scaled by
+`screenSpaceScale(view.scale)`, and route/border strokes use
+`vector-effect: non-scaling-stroke`, so zooming does not inflate typography or
+hairlines.
 
 The DOM is a four-level chain — container → viewport → world → stage — so the
 **3D camera effect** (`camera3d`) is a pure styling concern: the container gets
