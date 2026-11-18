@@ -1000,6 +1000,7 @@ rd.applyConfig(nextConfig);</pre>
             speed: 0.4,
             interactive: false,
             frameRoute: true,
+            padding: { top: 0, right: 0, bottom: 0, left: 0 },
             zoom: { enabled: true, durationMs: 900, minZoom: 1, maxZoom: 4 },
             view: { lat: 40, lng: 25, altitude: 1.9 },
             hexTiles: {
@@ -1470,6 +1471,24 @@ rd.applyConfig(nextConfig);</pre>
 
         // ── Scene (the options the constructor usually hard-codes) ──────────
         const sceneBox = section('studio-scene', 'Scene');
+        note(sceneBox, 'Map padding reserves space for hero content on each side (CSS pixels).');
+        const applyPadding = () => rd.setOptions({ padding: { ...studio.scene.padding } });
+        const paddingControls = {};
+        for (const side of ['top', 'right', 'bottom', 'left']) {
+          paddingControls[side] = slider(sceneBox, {
+            id: `padding-${side}`,
+            label: `Padding ${side}`,
+            min: 0,
+            max: 800,
+            step: 1,
+            value: 0,
+            format: (v) => `${v}px`,
+            onInput: (v) => {
+              studio.scene.padding[side] = v;
+              schedule(applyPadding);
+            },
+          });
+        }
         const surfaceSelect = selection(sceneBox, {
           id: 'surface',
           label: 'Surface',
@@ -2242,6 +2261,7 @@ rd.applyConfig(nextConfig);</pre>
                 opacity: round(studio.cities.ripple.opacity, 2),
               },
             },
+            padding: { ...studio.scene.padding },
             labels: labelsSnippet(),
             airports: airportsSnippet(),
             ...(studio.scene.surface === 'countries' ? { hexTiles: hexTilesSnippet() } : {}),
@@ -2276,6 +2296,8 @@ rd.applyConfig(nextConfig);</pre>
 
         const paintAll = () => {
           surfaceSelect.value = studio.scene.surface;
+          for (const side of ['top', 'right', 'bottom', 'left'])
+            paddingControls[side].paint(studio.scene.padding[side]);
           autoRotateToggle.paint(studio.scene.autoRotate);
           autoSpeed.paint(studio.scene.speed);
           interactiveToggle.paint(studio.scene.interactive);
@@ -2384,6 +2406,12 @@ rd.applyConfig(nextConfig);</pre>
             worldSelect.value = options.world;
           }
           if (options.surface) studio.scene.surface = options.surface;
+          if (options.padding) {
+            for (const side of ['top', 'right', 'bottom', 'left']) {
+              if (typeof options.padding[side] === 'number')
+                studio.scene.padding[side] = options.padding[side];
+            }
+          }
           if (options.autoRotate) {
             if (typeof options.autoRotate.enabled === 'boolean') {
               studio.scene.autoRotate = options.autoRotate.enabled;

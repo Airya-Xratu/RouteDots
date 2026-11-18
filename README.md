@@ -80,6 +80,66 @@ and a flat 2D fallback for browsers without WebGL.
 - 🧯 **Graceful degradation.** Without WebGL you get the same flat map in 2D
   with curved SVG routes and an animated plane. Same API, no breakage.
 
+## Hero layouts: reserve room for content
+
+`padding` reserves space inside the RouteDots container on any side, in CSS
+pixels. The globe or flat map (including its routes and labels) is framed in
+the remaining viewport. All sides default to zero. The flat world's ocean
+background still fills the container; the globe's background stays transparent.
+
+```html
+<section class="hero">
+  <div id="hero-map" aria-hidden="true"></div>
+  <div class="hero-card">
+    <h1>Where to next?</h1>
+    <p>See the journey before the booking.</p>
+    <button>Explore flights</button>
+  </div>
+</section>
+<style>
+  .hero {
+    position: relative;
+    min-height: 520px;
+    overflow: hidden;
+  }
+  #hero-map {
+    position: absolute;
+    inset: 0;
+  }
+  .hero-card {
+    position: relative;
+    z-index: 1;
+    width: min(320px, 80%);
+    padding: 32px;
+  }
+</style>
+```
+
+```ts
+import { RouteDots } from 'routedots';
+
+const hero = document.querySelector<HTMLElement>('.hero')!;
+const rd = new RouteDots(document.querySelector<HTMLElement>('#hero-map')!, {
+  padding: { left: 384 }, // room for the card on the left
+});
+rd.setRoute('LHR', 'DXB');
+
+// On narrow screens put the card above the map instead. ResizeObserver also
+// catches changes to the layout that aren't caused by a window resize.
+const layout = new ResizeObserver(() => {
+  rd.setOptions({
+    padding: hero.clientWidth < 700 ? { top: 200, left: 0 } : { top: 0, left: 384 },
+  });
+});
+layout.observe(hero);
+// On teardown: layout.disconnect(); rd.dispose();
+```
+
+Use `right`, `bottom`, or combinations of sides for other layouts. Keep the
+sum of opposing insets below the container size; otherwise the map viewport can
+collapse. Set a side to `0` to remove it (`setOptions` merges side values).
+The showcase Scene controls let you preview the insets and export them in JSON.
+
 ## Quick start
 
 ```bash

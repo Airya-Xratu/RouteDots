@@ -59,8 +59,21 @@ import type { City, HexTilesOptions, LatLon, MapSurface, WorldMode } from './typ
 
 export type RouteDotsMode = 'webgl' | 'flat';
 
+/** Space reserved around the map viewport, in CSS pixels. */
+export interface MapPadding {
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+}
+
 export interface RouteDotsOptions {
   theme?: 'light' | 'dark';
+  /** Insets for the map viewport in CSS pixels (default 0 on every side).
+   * Reserve space for overlay content while keeping routes and labels aligned.
+   * Negative or non-finite values are treated as zero.
+   */
+  padding?: MapPadding;
   /**
    * Which world to render:
    *
@@ -214,6 +227,9 @@ export class RouteDots {
   private options: RouteDotsOptions;
   private palette: RouteDotsPalette;
   private readonly container: HTMLElement;
+  private readonly host: HTMLElement;
+  private readonly originalPosition: string;
+  private readonly originalBackground: string;
   private readonly handlers = new Map<string, Set<EventHandler>>();
   private route: RouteDotsRouteInfo | null = null;
   /** Fingerprint of the hex-tile options last pushed to the renderer. */
@@ -221,9 +237,17 @@ export class RouteDots {
   private disposed = false;
 
   constructor(container: HTMLElement, options: RouteDotsOptions = {}) {
-    this.container = container;
+    this.host = container;
+    this.originalPosition = container.style.position;
+    this.originalBackground = container.style.backgroundColor;
+    if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
+    this.container = document.createElement('div');
+    this.container.setAttribute('data-rd-viewport', '');
+    this.container.style.cssText = 'position:absolute;overflow:hidden;';
+    container.appendChild(this.container);
     this.options = { theme: 'light', ...options };
     this.palette = resolvePalette(this.options.theme ?? 'light', this.options.colors);
+    this.applyPadding();
 
     if (this.wantsGlobe()) {
       this.mountWebGL();
@@ -423,6 +447,16 @@ export class RouteDots {
     this.options = mergeOptions(previous, options);
     this.palette = resolvePalette(this.options.theme ?? 'light', this.options.colors);
 
+    if (options.padding !== undefined) {
+      this.applyPadding();
+      // Padding only changes the viewport; don't restart a flying plane or
+      // restyle unrelated layers when a responsive layout changes.
+      if (Object.keys(options).every((key) => key === 'padding')) {
+        this.resize();
+        return;
+      }
+    }
+
     const structural =
       options.world !== undefined ||
       options.surface !== undefined ||
@@ -436,6 +470,7 @@ export class RouteDots {
       return;
     }
     this.applyLive();
+    if (options.padding !== undefined) this.resize();
   }
 
   /**
@@ -448,6 +483,7 @@ export class RouteDots {
     if (this.disposed) return;
     this.options = { theme: 'light', ...cloneOptions(options) };
     this.palette = resolvePalette(this.options.theme ?? 'light', this.options.colors);
+    this.applyPadding();
     this.remount();
   }
 
@@ -549,6 +585,9 @@ export class RouteDots {
     if (this._mode === 'webgl') this.unmountWebGL();
     if (this._mode === 'flat') this.unmountFlat();
     this._mode = null;
+    this.container.remove();
+    this.host.style.position = this.originalPosition;
+    this.host.style.backgroundColor = this.originalBackground;
     this.handlers.clear();
   }
 
@@ -573,6 +612,15 @@ export class RouteDots {
     }
   }
 
+  /** Apply insets to the shared viewport, not the host's overlay content. */
+  private applyPadding(): void {
+    for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+      const value = this.options.padding?.[side];
+      this.container.style[side] =
+        `${typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0}px`;
+    }
+  }
+
   /** True when the globe should be mounted (world option + WebGL probe). */
   private wantsGlobe(): boolean {
     if ((this.options.world ?? 'auto') === 'flat') return false;
@@ -586,6 +634,7 @@ export class RouteDots {
     if (this._mode === 'webgl') this.unmountWebGL();
     if (this._mode === 'flat') this.unmountFlat();
     this._mode = null;
+    this.host.style.backgroundColor = this.originalBackground;
 
     if (this.wantsGlobe()) {
       this.mountWebGL();
@@ -695,6 +744,7 @@ export class RouteDots {
     }
 
     if (this._mode === 'flat' && this.flat) {
+      this.host.style.backgroundColor = palette.ocean;
       this.flat.applyStyle({
         theme: o.theme ?? 'light',
         colors: o.colors,
@@ -943,6 +993,7 @@ export class RouteDots {
       minRouteZoom: o.flat?.minRouteZoom,
     };
     this.flat = new FlatRouteMap(this.container, flatOptions);
+    this.host.style.backgroundColor = this.palette.ocean;
     this.flat.onDrawn = () => this.emit('route:drawn', this.getRoute());
     this.palette = this.flat.activePalette;
     this.lastHexTiles = JSON.stringify(this.options.hexTiles ?? null);
