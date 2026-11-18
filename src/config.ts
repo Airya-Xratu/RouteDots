@@ -101,6 +101,7 @@ export class RouteDotsConfigError extends Error {
 const OPTION_KEYS = [
   'theme',
   'world',
+  'padding',
   'surface',
   'colors',
   'view',
@@ -614,6 +615,26 @@ function sanitizeAirports(
   return finish(out);
 }
 
+function sanitizePadding(
+  value: unknown,
+  path: string,
+  warnings: string[],
+): Record<string, unknown> | undefined {
+  const source = readObject(value, path, warnings);
+  if (!source) return undefined;
+  const out: Record<string, unknown> = {};
+  const sides = ['top', 'right', 'bottom', 'left'] as const;
+  for (const side of sides) {
+    const number = readNumber(source[side], `${path}.${side}`, warnings);
+    if (number !== undefined) {
+      if (number < 0) warn(warnings, `${path}.${side} must be non-negative`);
+      else out[side] = number;
+    }
+  }
+  noteUnknown(source, sides, path, warnings);
+  return finish(out);
+}
+
 function sanitizeCamera(
   value: unknown,
   path: string,
@@ -851,6 +872,8 @@ export function sanitizeRouteDotsOptions(
     put(out, 'airports', sanitizeAirports(source.airports, `${path}.airports`, warnings));
   if ('camera3d' in source)
     put(out, 'camera3d', sanitizeCamera(source.camera3d, `${path}.camera3d`, warnings));
+  if ('padding' in source)
+    put(out, 'padding', sanitizePadding(source.padding, `${path}.padding`, warnings));
   if ('frameRoute' in source) {
     put(out, 'frameRoute', readBoolean(source.frameRoute, `${path}.frameRoute`, warnings));
   }

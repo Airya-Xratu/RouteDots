@@ -651,7 +651,7 @@ export class FlatRouteMap {
     this.lastViewport = this.viewportSize();
     this.framed = true;
     if (this.route) {
-      const target = this.routeView();
+      const target = this.options.zoomToRoute === false ? this.worldView() : this.routeView();
       if (target) {
         this.view = target;
         this.applyView();

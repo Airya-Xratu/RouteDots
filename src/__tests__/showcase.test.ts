@@ -96,6 +96,20 @@ describe('showcase', () => {
     expect(document.body.classList.contains('studio-open')).toBe(false);
   });
 
+  it('previews side padding in the generated options and resets it', async () => {
+    const { window, document } = openShowcase();
+    const input = document.getElementById('padding-left') as HTMLInputElement;
+    expect(input.value).toBe('0');
+    input.value = '240';
+    const event = document.createEvent('Event');
+    event.initEvent('input', true, false);
+    input.dispatchEvent(event);
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    expect(document.getElementById('studio-code')!.textContent).toContain('"left": 240');
+    document.getElementById('studio-reset')!.click();
+    expect(input.value).toBe('0');
+  });
+
   it('offers the route-zoom floor and ceiling as sliders', () => {
     const { document } = openShowcase();
     const floor = document.getElementById('zoom-min') as HTMLInputElement | null;

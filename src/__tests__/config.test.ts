@@ -30,6 +30,7 @@ const scene = {
   options: {
     theme: 'dark',
     world: 'flat',
+    padding: { top: 10, right: 20, bottom: 30, left: 240 },
     surface: 'dots',
     colors: { outbound: '#ff0066', globe: '#06121f' },
     view: { lat: 40, lng: 25, altitude: 1.9 },
@@ -93,6 +94,12 @@ const scene = {
 } as const;
 
 describe('parseRouteDotsConfig', () => {
+  it('drops invalid padding sides and preserves valid ones', () => {
+    const parsed = parseRouteDotsConfig({ padding: { left: 100, right: -5, top: '12', extra: 1 } });
+    expect(parsed.options.padding).toEqual({ left: 100 });
+    expect(parsed.warnings).toHaveLength(3);
+  });
+
   it('reads a versioned document and keeps every portable option', () => {
     const parsed = parseRouteDotsConfig(JSON.stringify(scene));
     expect(parsed.kind).toBe('document');
